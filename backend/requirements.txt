@@ -1,0 +1,16 @@
+# Minimum-version pins (not exact pins) so `pip install` resolves whatever
+# current release is actually compatible with whatever Python you're
+# running — including Python 3.14, where several of these libraries only
+# added support in releases *after* what an exact pin would have grabbed.
+# Known floor versions below are the first release of each package that
+# ships Python 3.14 wheels; pip will install that version or newer.
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+sqlalchemy>=2.0.41          # 3.14 support landed in 2.0.41
+psycopg2-binary>=2.9.12     # 3.14 wheels added in 2.9.12 (2.9.9 has none -> source build failure)
+pydantic[email]>=2.11.7     # pydantic-core 3.14 wheels require pydantic 2.11.7+
+pydantic-settings>=2.8.1
+python-jose[cryptography]>=3.3.0
+bcrypt>=4.2.0               # 3.14 support added in a 4.2.x release
+python-multipart>=0.0.9
+alembic>=1.13.1

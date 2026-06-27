@@ -1,0 +1,388 @@
+import uuid
+import logging
+from datetime import date
+from sqlalchemy.orm import Session
+from fastapi import HTTPException
+
+from app.models.leave import LeaveRequest, LeaveStatus, AlterAssignment, AssignmentType
+from app.models.timetable import TimetableSlot
+from app.models.user import User, Role
+from app.schemas.leave import LeaveCreate, LeaveBatchCreate, FreeTeacherOut
+from app.services.credit_service import apply_credit_change
+from app.services import day_order_service, notification_service, substitution_service
+from app.services.admin_service import log_audit_event
+
+logger = logging.getLogger(__name__)
+
+
+def submit_leave(teacher_id: int, data: LeaveCreate, db: Session) -> LeaveRequest:
+    """Single-period leave. Resolves the date to a Day Order via the
+    academic calendar and rejects outright if the date isn't a working
+    day — per spec, holidays must never generate leave requests, substitute
+    assignments, or credit transactions."""
+    calendar_day = day_order_service.assert_working_day_or_400(db, data.date)
+
+    leave = LeaveRequest(
+        teacher_id=teacher_id,
+        date=data.date,
+        day_order=calendar_day.day_order,
+        period_number=data.period_number,
+        reason=data.reason,
+        status=LeaveStatus.pending,
+    )
+    substitution_service.mark_emergency_if_applicable(db, leave)
+    db.add(leave)
+    db.commit()
+    db.refresh(leave)
+    return leave
+
+
+def submit_leave_batch(teacher_id: int, data: LeaveBatchCreate, db: Session) -> list[LeaveRequest]:
+    """Multi-period / whole-day leave submitted in one form. All resulting
+    rows share a batch_id. whole_day=True expands to every period the
+    teacher actually has on their timetable for that date's Day Order —
+    not a blind 1..5, so a teacher with only 3 scheduled periods doesn't
+    get leave rows for periods they were never teaching."""
+    logger.info(
+        "submit_leave_batch: teacher_id=%s date=%s whole_day=%s period_numbers=%s",
+        teacher_id, data.date, data.whole_day, data.period_numbers,
+    )
+    try:
+        calendar_day = day_order_service.assert_working_day_or_400(db, data.date)
+        logger.debug("submit_leave_batch: resolved day_order=%s for date=%s", calendar_day.day_order, data.date)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception(
+            "submit_leave_batch: unexpected error resolving calendar day for date=%s teacher_id=%s",
+            data.date, teacher_id,
+        )
+        raise HTTPException(status_code=500, detail="Failed to resolve academic calendar for the requested date")
+
+    try:
+        if data.whole_day:
+            scheduled = (
+                db.query(TimetableSlot.period_number)
+                .filter(TimetableSlot.teacher_id == teacher_id, TimetableSlot.day_order == calendar_day.day_order)
+                .all()
+            )
+            periods = sorted({p for (p,) in scheduled})
+            if not periods:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"No timetable periods found for Day Order {calendar_day.day_order} — nothing to apply leave for",
+                )
+        else:
+            if not data.period_numbers:
+                raise HTTPException(status_code=400, detail="period_numbers is required unless whole_day=True")
+            periods = sorted(set(data.period_numbers))
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception(
+            "submit_leave_batch: unexpected error resolving periods teacher_id=%s date=%s",
+            teacher_id, data.date,
+        )
+        raise HTTPException(status_code=500, detail="Failed to determine leave periods")
+
+    logger.debug("submit_leave_batch: submitting %d period(s) %s for teacher_id=%s", len(periods), periods, teacher_id)
+
+    try:
+        batch_id = uuid.uuid4()
+        leaves = []
+        for period in periods:
+            leave = LeaveRequest(
+                teacher_id=teacher_id,
+                date=data.date,
+                day_order=calendar_day.day_order,
+                period_number=period,
+                reason=data.reason,
+                status=LeaveStatus.pending,
+                batch_id=batch_id,
+            )
+            substitution_service.mark_emergency_if_applicable(db, leave)
+            db.add(leave)
+            leaves.append(leave)
+
+        db.commit()
+        for leave in leaves:
+            db.refresh(leave)
+        logger.info(
+            "submit_leave_batch: created %d leave row(s) batch_id=%s teacher_id=%s date=%s",
+            len(leaves), batch_id, teacher_id, data.date,
+        )
+        return leaves
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception(
+            "submit_leave_batch: DB error persisting leave rows teacher_id=%s date=%s periods=%s",
+            teacher_id, data.date, periods,
+        )
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to save leave request — please try again")
+
+
+def get_all_leaves(db: Session) -> list[LeaveRequest]:
+    return db.query(LeaveRequest).order_by(LeaveRequest.created_at.desc()).all()
+
+
+def get_teacher_leaves(teacher_id: int, db: Session) -> list[LeaveRequest]:
+    return (
+        db.query(LeaveRequest)
+        .filter(LeaveRequest.teacher_id == teacher_id)
+        .order_by(LeaveRequest.created_at.desc())
+        .all()
+    )
+
+
+def approve_leave(leave_id: int, db: Session) -> tuple[LeaveRequest, list[FreeTeacherOut]]:
+    leave = _get_leave_or_404(leave_id, db)
+
+    if leave.status != LeaveStatus.pending:
+        raise HTTPException(status_code=400, detail="Only pending requests can be approved")
+
+    # Defensive re-check: the calendar may have changed (e.g. retroactively
+    # marked a holiday) between submission and approval.
+    day_order_service.assert_working_day_or_400(db, leave.date)
+
+    leave.status = LeaveStatus.approved
+    db.commit()
+    db.refresh(leave)
+
+    notification_service.create_notification(
+        db, leave.teacher_id,
+        title="Leave approved",
+        body=f"Your leave for {leave.date} (Day Order {leave.day_order}, period {leave.period_number}) was approved.",
+        event_type="leave_approved",
+        related_leave_id=leave.id,
+    )
+    db.commit()
+
+    # Campus Operations Mode: in "autonomous" mode this immediately picks
+    # and assigns a substitute with no further admin action. In "manual"
+    # or "assisted" mode it's a no-op — the admin assigns via the normal
+    # flow, optionally consulting get_ranked_recommendations for a
+    # ranked, scored list instead of a flat one.
+    substitution_service.auto_process_approved_leave(db, leave)
+    db.refresh(leave)
+
+    free_teachers = detect_free_teachers(leave.day_order, leave.period_number, leave.teacher_id, db)
+    return leave, free_teachers
+
+
+def bulk_approve(leave_ids: list[int], db: Session) -> list[LeaveRequest]:
+    results = []
+    for leave_id in leave_ids:
+        leave, _ = approve_leave(leave_id, db)
+        results.append(leave)
+    return results
+
+
+def reject_leave(leave_id: int, db: Session) -> LeaveRequest:
+    leave = _get_leave_or_404(leave_id, db)
+
+    if leave.status != LeaveStatus.pending:
+        raise HTTPException(status_code=400, detail="Only pending requests can be rejected")
+
+    leave.status = LeaveStatus.rejected
+    db.commit()
+    db.refresh(leave)
+
+    notification_service.create_notification(
+        db, leave.teacher_id,
+        title="Leave rejected",
+        body=f"Your leave for {leave.date} (Day Order {leave.day_order}, period {leave.period_number}) was rejected.",
+        event_type="leave_rejected",
+        related_leave_id=leave.id,
+    )
+    db.commit()
+    return leave
+
+
+def bulk_reject(leave_ids: list[int], db: Session) -> list[LeaveRequest]:
+    return [reject_leave(leave_id, db) for leave_id in leave_ids]
+
+
+def detect_free_teachers(
+    day_order: int,
+    period_number: int,
+    exclude_teacher_id: int,
+    db: Session,
+) -> list[FreeTeacherOut]:
+    """Return teachers who have NO timetable slot for this Day Order +
+    period. Day-Order-based (not weekday-based) so it correctly reflects
+    the rotating schedule regardless of which calendar date triggered the
+    lookup."""
+    busy_ids = (
+        db.query(TimetableSlot.teacher_id)
+        .filter(
+            TimetableSlot.day_order == day_order,
+            TimetableSlot.period_number == period_number,
+        )
+        .subquery()
+    )
+
+    free_teachers = (
+        db.query(User)
+        .filter(
+            User.role == Role.teacher,
+            User.is_active == True,  # noqa: E712
+            User.id != exclude_teacher_id,
+            ~User.id.in_(busy_ids),
+        )
+        .all()
+    )
+
+    return [FreeTeacherOut(id=t.id, name=t.name, department=t.department) for t in free_teachers]
+
+
+def assign_substitute(
+    leave_id: int, substitute_id: int, db: Session, *,
+    assignment_type: AssignmentType = AssignmentType.admin_assigned,
+    compatibility_score: float | None = None,
+) -> AlterAssignment:
+    leave = _get_leave_or_404(leave_id, db)
+
+    if leave.status != LeaveStatus.approved:
+        raise HTTPException(status_code=400, detail="Leave must be approved before assigning substitute")
+
+    if leave.alter_assignment:
+        raise HTTPException(status_code=400, detail="Substitute already assigned for this leave — use override instead")
+
+    # Re-check at assignment time too — covers a holiday being marked
+    # in the window between approval and substitute assignment.
+    day_order_service.assert_working_day_or_400(db, leave.date)
+
+    substitute = db.query(User).filter(User.id == substitute_id, User.role == Role.teacher, User.is_active == True).first()  # noqa: E712
+    if not substitute:
+        raise HTTPException(status_code=404, detail="Substitute teacher not found")
+
+    if substitute.id == leave.teacher_id:
+        raise HTTPException(status_code=400, detail="A teacher cannot be their own substitute")
+
+    assignment = substitution_service.create_assignment(
+        db, leave, substitute, assignment_type, compatibility_score, actor_id=None,
+    )
+    db.commit()
+    db.refresh(assignment)
+    return assignment
+
+
+def override_substitute(
+    leave_id: int, new_substitute_id: int, actor: User, db: Session,
+) -> AlterAssignment:
+    """Replaces an existing assignment (often an auto-assigned one) with
+    a different substitute, chosen by an admin. Reverses the original
+    credit transactions before applying new ones, so the ledger always
+    reflects who is actually covering the class right now — not a
+    history of every assignment that was ever proposed."""
+    leave = _get_leave_or_404(leave_id, db)
+    existing = leave.alter_assignment
+    if not existing:
+        raise HTTPException(status_code=400, detail="No existing assignment to override — use the normal assign flow")
+    if existing.is_locked:
+        raise HTTPException(status_code=400, detail="This assignment is locked — unlock it before overriding")
+
+    new_substitute = db.query(User).filter(User.id == new_substitute_id, User.role == Role.teacher, User.is_active == True).first()  # noqa: E712
+    if not new_substitute:
+        raise HTTPException(status_code=404, detail="Substitute teacher not found")
+    if new_substitute.id == leave.teacher_id:
+        raise HTTPException(status_code=400, detail="A teacher cannot be their own substitute")
+    if new_substitute.id == existing.substitute_teacher_id:
+        raise HTTPException(status_code=400, detail="That teacher is already assigned")
+
+    old_substitute_id = existing.substitute_teacher_id
+    old_type = existing.assignment_type
+
+    # Reverse the old credit changes, then apply new ones — net effect on
+    # the original leave-taker is zero, but the displaced substitute's
+    # credit is correctly returned.
+    apply_credit_change(
+        teacher_id=old_substitute_id, change=-1,
+        reason=f"Override: removed as substitute for {leave.date} period {leave.period_number}",
+        leave_id=leave.id, db=db,
+    )
+    apply_credit_change(
+        teacher_id=new_substitute.id, change=+1,
+        reason=f"Override: assigned as substitute for {leave.date} period {leave.period_number}",
+        leave_id=leave.id, db=db,
+    )
+
+    existing.substitute_teacher_id = new_substitute.id
+    existing.assignment_type = AssignmentType.overridden
+    existing.compatibility_score = None
+
+    log_audit_event(
+        db, actor.id, "substitution.overridden", "leave_request", leave.id,
+        {"old_substitute_id": old_substitute_id, "old_type": old_type.value, "new_substitute_id": new_substitute.id},
+    )
+
+    notification_service.create_notification(
+        db, new_substitute.id, title="You've been assigned a substitute class",
+        body=f"Cover {leave.date} (Day Order {leave.day_order}, period {leave.period_number}) — assigned by an admin.",
+        event_type="substitute_assigned", related_leave_id=leave.id,
+    )
+    notification_service.create_notification(
+        db, old_substitute_id, title="Substitute assignment changed",
+        body=f"You're no longer covering {leave.date} period {leave.period_number} — reassigned by an admin.",
+        event_type="substitute_assigned", related_leave_id=leave.id,
+    )
+
+    db.commit()
+    db.refresh(existing)
+    return existing
+
+
+def undo_assignment(leave_id: int, actor: User, db: Session) -> LeaveRequest:
+    """Removes the current substitute assignment entirely (reverting
+    credits) and puts the leave back to a state where a fresh assignment
+    can be made — used for "Undo Last Action" / "Undo Auto Assignments"
+    from the spec. Does not touch leave.status; the leave stays approved,
+    only the substitute assignment is undone."""
+    leave = _get_leave_or_404(leave_id, db)
+    existing = leave.alter_assignment
+    if not existing:
+        raise HTTPException(status_code=400, detail="No assignment to undo")
+    if existing.is_locked:
+        raise HTTPException(status_code=400, detail="This assignment is locked — unlock it before undoing")
+
+    apply_credit_change(
+        teacher_id=leave.teacher_id, change=+1,
+        reason=f"Undo: leave on {leave.date} period {leave.period_number} reverted",
+        leave_id=leave.id, db=db,
+    )
+    apply_credit_change(
+        teacher_id=existing.substitute_teacher_id, change=-1,
+        reason=f"Undo: substitute assignment for {leave.date} period {leave.period_number} reverted",
+        leave_id=leave.id, db=db,
+    )
+
+    log_audit_event(
+        db, actor.id, "substitution.undone", "leave_request", leave.id,
+        {"removed_substitute_id": existing.substitute_teacher_id, "was_type": existing.assignment_type.value},
+    )
+
+    db.delete(existing)
+    db.commit()
+    db.refresh(leave)
+    return leave
+
+
+def set_assignment_lock(leave_id: int, locked: bool, actor: User, db: Session) -> AlterAssignment:
+    leave = _get_leave_or_404(leave_id, db)
+    existing = leave.alter_assignment
+    if not existing:
+        raise HTTPException(status_code=400, detail="No assignment to lock")
+    existing.is_locked = locked
+    log_audit_event(db, actor.id, "substitution.lock_changed", "leave_request", leave.id, {"locked": locked})
+    db.commit()
+    db.refresh(existing)
+    return existing
+
+
+def _get_leave_or_404(leave_id: int, db: Session) -> LeaveRequest:
+    leave = db.query(LeaveRequest).filter(LeaveRequest.id == leave_id).first()
+    if not leave:
+        raise HTTPException(status_code=404, detail="Leave request not found")
+    return leave

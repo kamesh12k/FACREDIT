@@ -1,0 +1,148 @@
+import api from './client'
+
+export const publicSettingsApi = {
+  get: () => api.get('/settings/public'),
+}
+
+export const authApi = {
+  login: (data) => api.post('/auth/login', data),
+  register: (data) => api.post('/auth/register', data),
+}
+
+export const adminApi = {
+  firstLoginSetup: (data) => api.post('/admin/first-login/setup', data),
+  listSecondaryAdmins: () => api.get('/admin/secondary-admins'),
+  createSecondaryAdmin: (data) => api.post('/admin/secondary-admins', data),
+  enableAdmin: (id) => api.patch(`/admin/secondary-admins/${id}/enable`),
+  disableAdmin: (id) => api.patch(`/admin/secondary-admins/${id}/disable`),
+  auditLogs: () => api.get('/admin/audit-logs'),
+  factoryReset: (data) => api.post('/admin/factory-reset', data),
+}
+
+export const teachersApi = {
+  list: () => api.get('/teachers/'),
+  create: (data) => api.post('/teachers/', data),
+  me: () => api.get('/teachers/me'),
+  credits: (id) => api.get(`/teachers/${id}/credits`),
+}
+
+export const timetableApi = {
+  getByTeacher: (teacherId) => api.get(`/timetable/teacher/${teacherId}`),
+  getByClass: (classId) => api.get(`/timetable/class/${classId}`),
+  createSlot: (data) => api.post('/timetable/slot', data),
+  upload: (slots) => api.post('/timetable/', { slots }),
+  deleteSlot: (id) => api.delete(`/timetable/${id}`),
+}
+
+export const departmentsApi = {
+  list: () => api.get('/departments/'),
+  create: (data) => api.post('/departments/', data),
+}
+
+export const subjectsApi = {
+  list: (includeArchived = false) => api.get('/subjects/', { params: { include_archived: includeArchived } }),
+  create: (data) => api.post('/subjects/', data),
+  update: (id, data) => api.patch(`/subjects/${id}`, data),
+  archive: (id) => api.patch(`/subjects/${id}/archive`),
+  unarchive: (id) => api.patch(`/subjects/${id}/unarchive`),
+}
+
+export const classesApi = {
+  list: () => api.get('/classes/'),
+  create: (data) => api.post('/classes/', data),
+  update: (id, data) => api.patch(`/classes/${id}`, data),
+  remove: (id) => api.delete(`/classes/${id}`),
+}
+
+export const roomsApi = {
+  list: (roomType) => api.get('/rooms/', { params: roomType ? { room_type: roomType } : {} }),
+  create: (data) => api.post('/rooms/', data),
+  update: (id, data) => api.patch(`/rooms/${id}`, data),
+  remove: (id) => api.delete(`/rooms/${id}`),
+  availabilityDashboard: (dayOrder, periodNumber) =>
+    api.get('/rooms/availability/dashboard', { params: { day_order: dayOrder, period_number: periodNumber } }),
+  checkAvailability: (roomId, dayOrder, periodNumber) =>
+    api.get(`/rooms/${roomId}/check-availability`, { params: { day_order: dayOrder, period_number: periodNumber } }),
+}
+
+export const dayOrderApi = {
+  getRange: (start, end) => api.get('/day-order-calendar/', { params: { start, end } }),
+  bulkSet: (entries) => api.post('/day-order-calendar/bulk-set', entries),
+  resolve: (params) => api.get('/day-order-calendar/resolve', { params }), // { date }
+}
+
+// New: Academic Calendar & Holiday Management
+export const academicCalendarApi = {
+  // Academic years
+  listAcademicYears: () => api.get('/academic-calendar/academic-years'),
+  createAcademicYear: (data) => api.post('/academic-calendar/academic-years', data),
+
+  // Semesters
+  listSemesters: (academicYearId) => api.get('/academic-calendar/semesters', { params: academicYearId ? { academic_year_id: academicYearId } : {} }),
+  createSemester: (data) => api.post('/academic-calendar/semesters', data),
+
+  // Calendar days (holidays + day order)
+  getRange: (start, end) => api.get('/academic-calendar/days', { params: { start, end } }),
+  getDay: (date) => api.get(`/academic-calendar/days/${date}`),
+  markDay: (data) => api.post('/academic-calendar/days/mark', data),
+  bulkMarkDays: (data) => api.post('/academic-calendar/days/bulk-mark', data),
+  assignDayOrder: (data) => api.post('/academic-calendar/days/day-order/assign', data),
+  skipDayOrder: (data) => api.post('/academic-calendar/days/day-order/skip', data),
+  clearOverride: (date) => api.delete(`/academic-calendar/days/${date}/override`),
+  deleteDay: (date) => api.delete(`/academic-calendar/days/${date}`),
+
+  // Resolve
+  resolve: (date) => api.get('/academic-calendar/resolve', { params: { date } }),
+
+  // Reports
+  workingDayReport: (start, end) => api.get('/academic-calendar/reports/working-days', { params: { start, end } }),
+  holidayReport: (start, end) => api.get('/academic-calendar/reports/holidays', { params: { start, end } }),
+  dayOrderReport: (start, end) => api.get('/academic-calendar/reports/day-orders', { params: { start, end } }),
+  facultyWorkloadReport: () => api.get('/academic-calendar/reports/faculty-workload'),
+
+  // Today / Home summary
+  todaySummary: (date) => api.get('/academic-calendar/today-summary', { params: date ? { date } : {} }),
+  myTodaySummary: (date) => api.get('/academic-calendar/my-today-summary', { params: date ? { date } : {} }),
+}
+
+export const leavesApi = {
+  apply: (data) => api.post('/leaves/', data),
+  applyBatch: (data) => api.post('/leaves/batch', data),
+  myLeaves: () => api.get('/leaves/my'),
+  all: () => api.get('/leaves/'),
+  approve: (id) => api.patch(`/leaves/${id}/approve`),
+  reject: (id) => api.patch(`/leaves/${id}/reject`),
+  bulkApprove: (leaveIds) => api.post('/leaves/bulk-approve', { leave_ids: leaveIds }),
+  bulkReject: (leaveIds) => api.post('/leaves/bulk-reject', { leave_ids: leaveIds }),
+  assignSubstitute: (id, substituteId) => api.post(`/leaves/${id}/assign`, { substitute_teacher_id: substituteId }),
+  freeTeachers: (id) => api.get(`/leaves/${id}/free-teachers`),
+  // Autonomous Substitution Engine
+  recommendations: (id, limit = 5) => api.get(`/leaves/${id}/recommendations`, { params: { limit } }),
+  assignRecommended: (id, substituteId) => api.post(`/leaves/${id}/assign-recommended`, { substitute_teacher_id: substituteId }),
+  overrideSubstitute: (id, newSubstituteId) => api.post(`/leaves/${id}/override`, { new_substitute_teacher_id: newSubstituteId }),
+  undoAssignment: (id) => api.post(`/leaves/${id}/undo-assignment`),
+  setLock: (id, locked) => api.post(`/leaves/${id}/lock`, { locked }),
+}
+
+export const campusOperationsApi = {
+  getMode: () => api.get('/campus-operations/mode'),
+  setMode: (mode) => api.put('/campus-operations/mode', { mode }),
+  myPreferences: () => api.get('/campus-operations/preferences/me'),
+  updateMyPreferences: (data) => api.put('/campus-operations/preferences/me', data),
+  teacherPreferences: (teacherId) => api.get(`/campus-operations/preferences/${teacherId}`),
+}
+
+export const notificationsApi = {
+  list: (unreadOnly = false) => api.get('/notifications/', { params: { unread_only: unreadOnly } }),
+  unreadCount: () => api.get('/notifications/unread-count'),
+  markRead: (id) => api.patch(`/notifications/${id}/read`),
+  markAllRead: () => api.patch('/notifications/read-all'),
+  vapidPublicKey: () => api.get('/notifications/vapid-public-key'),
+  subscribe: (subscription) => api.post('/notifications/subscribe', subscription),
+}
+
+export const creditsApi = {
+  myTransactions: () => api.get('/credits/my/transactions'),
+  allTransactions: () => api.get('/credits/transactions'),
+  report: () => api.get('/credits/report'),
+}
