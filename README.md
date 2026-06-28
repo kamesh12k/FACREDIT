@@ -166,68 +166,154 @@ users (admin/teacher with RBAC + forced credential change)
 
 ---
 
-## Quick Start (Development)
+## Quick Start (Development & Operations Setup)
 
 ### Prerequisites
-Python 3.11+, Node.js 18+, PostgreSQL 14+, Git.
+* **Python**: Version 3.11 or later
+* **Node.js**: Version 18 or later
+* **PostgreSQL**: Version 14 or later
+* **Git**: Installed and configured
 
-### Step 1: Database
+---
 
-```bash
-createdb credits_db
-psql -d credits_db -f database/schema.sql
-psql -d credits_db -f database/seed.sql   # optional sample data
-```
+### Step-by-Step Installation & Launch
 
-### Step 2: Backend
+#### Step 1: Database Setup
+1. Open your terminal and create the PostgreSQL database:
+   ```bash
+   createdb credits_db
+   ```
+2. Initialize the database schema:
+   ```bash
+   psql -d credits_db -f database/schema.sql
+   ```
+3. Run the database migrations (if applying upgrades):
+   ```bash
+   psql -d credits_db -f database/migrations/002_add_rbac_and_audit.sql
+   psql -d credits_db -f database/migrations/003_academic_calendar.sql
+   psql -d credits_db -f database/migrations/004_autonomous_substitution.sql
+   ```
+4. Seed the database with initial sample departments, teachers, classes, and subjects:
+   ```bash
+   psql -d credits_db -f database/seed.sql
+   ```
+5. Run the cancellation enum fix to support active leave cancellations:
+   ```sql
+   psql -d credits_db -c "ALTER TYPE leave_status ADD VALUE 'cancelled';"
+   ```
 
-```bash
-cd backend
-python3 -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-cp .env.example .env
-# Edit .env — set DATABASE_URL and generate SECRET_KEY:
-#   python3 -c "import secrets; print(secrets.token_hex(32))"
-python3 preflight_check.py
-uvicorn app.main:app --reload --port 8000
-```
+#### Step 2: Backend Configuration & Startup
+1. Navigate to the backend directory:
+   ```bash
+   cd backend
+   ```
+2. Create and activate a Python virtual environment:
+   ```bash
+   python -m venv venv
+   # On Windows (PowerShell):
+   .\venv\Scripts\Activate.ps1
+   # On macOS/Linux:
+   source venv/bin/activate
+   ```
+3. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. Create your local environment configuration file:
+   ```bash
+   cp .env.example .env
+   ```
+5. Edit `.env` to configure:
+   * `DATABASE_URL=postgresql://postgres@localhost:5432/credits_db`
+   * `SECRET_KEY` (generate one using `python -c "import secrets; print(secrets.token_hex(32))"`)
+6. Execute the preflight check script to verify schema integrity:
+   ```bash
+   python preflight_check.py
+   ```
+7. Start the FastAPI uvicorn server:
+   ```bash
+   uvicorn app.main:app --reload --port 8000
+   ```
+   * *Swagger interactive API documentation will be available at:* `http://localhost:8000/docs`
 
-API docs: `http://localhost:8000/docs`
+#### Step 3: Frontend Installation & Launch
+1. Open a new terminal window and navigate to the frontend directory:
+   ```bash
+   cd frontend
+   ```
+2. Install the frontend dependencies:
+   ```bash
+   npm install
+   ```
+3. Launch the Vite development server:
+   ```bash
+   npm run dev
+   ```
+   * *The application dashboard will be live at:* `http://localhost:5173`
 
-### Step 3: Frontend
+---
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
+### Step-by-Step Operations Workflows
 
-`http://localhost:5173` proxies `/api/*` to the backend.
+#### 1. First-Time Login & Init Setup (Admin)
+1. Open the browser and go to `http://localhost:5173/login`.
+2. Enter the bootstrap credentials:
+   * **Username**: `admin`
+   * **Password**: `admin`
+3. The system will automatically redirect you to the **First Login Setup** page.
+4. Input your new username (e.g. `kamesh1272006k@gmail.com`) and secure password, then click **Complete Setup**.
+5. Once inside the dashboard, navigate to **Calendar & Day Order** under the Admin menu.
+6. Create an **Academic Year** and an **Odd/Even Semester**.
+7. Click on dates in the calendar to mark them as **Working Days** and assign a **Day Order** (DO1–DO6). *Note: Downstream operations like timetabling and leaves require active working days.*
 
-### Step 4: First Login
+#### 2. Configuring Campus Operations Mode
+1. As an Administrator, click **Settings** in the sidebar.
+2. Under **Campus Operations Mode**, select one of the master modes:
+   * **Manual**: Leave approvals and substitute assignments are fully handled by the Administrator.
+   * **Assisted**: Leaves are automatically approved. The substitute list is ranked by compatibility, but the Admin must manually select and click assign.
+   * **Autonomous**: Leaves are automatically approved, and the substitution engine immediately selects and assigns the best-suited substitute, sending push notifications.
+3. Toggle **Teacher Workflow Settings** to configure whether teachers can self-assign substitutes.
+4. Click **Save Settings**.
 
-1. Open `http://localhost:5173`
-2. Log in: `admin` / `admin`
-3. Set new credentials (forced)
-4. Go to **Calendar & Day Order** and mark at least one working day with a Day Order — leave requests and timetable scheduling are rejected until the calendar has working days
+#### 3. Submitting & Cancelling Leaves (Teacher Flow)
+1. **Submit Leave**:
+   * Log in as a Teacher (e.g. `12CSSMK@muthayammal.in` / `Password123`).
+   * Click **Apply for Leave** in the sidebar.
+   * Select a date. The system automatically fetches and displays the active Day Order or Holiday status.
+   * Select **Whole Day** or specific periods, input the reason, and click **Submit Request**.
+2. **Cancel Leave (Same-Day Policy)**:
+   * Click **Leave History** in the sidebar.
+   * If the leave date is in the **future**, a red **Cancel** button is fully available.
+   * If the leave date is **today (same-day)**:
+     * **Before 10:00 AM**: The **Cancel** button is clickable. Click it to open the confirmation modal and cancel.
+     * **At or After 10:00 AM**: The **Cancel** button is disabled. Hovering over it displays: *"Same-day leave cancellation is only available before 10:00 AM. Please contact an administrator."*
+   * If the leave date is in the **past**, cancellation is disabled.
+
+#### 4. Managing & Overriding Leaves (Admin Flow)
+1. Log in as an Administrator.
+2. Navigate to **Leaves** in the sidebar to review all requests.
+3. **Approval / Rejection**: Click **Approve** or **Reject** on pending items. If in Assisted/Manual mode, you can click **Assign Sub** to manually select a teacher.
+4. **Override Substitute**: If a substitute is already assigned, click the **Swap icon** next to their name in the table, select a new candidate, and confirm.
+5. **Admin Cancel Override**:
+   * Click **Cancel** on any active approved/pending leave row.
+   * The system fetches a **Cancellation Impact Preview** modal showing details of the affected substitute.
+   * Enter the mandatory **cancellation reason** in the input text area.
+   * Click **Confirm Cancel**. The substitute is removed, credits are reversed, and notifications are sent.
+
+#### 5. Monitoring Daily Coverages (Today's Substitutions Dashboard)
+1. Navigate to **Today's Substitutions** (for Admins) or **Today's Coverage** (for Teachers).
+2. The page displays the current Date and Day Order (e.g., `Date: 28-Jun-2026 | Day Order: DO4`).
+3. You will see a detailed grid with columns: *Period, Class, Original Teacher, Substitute Teacher, and Assignment Source* (Manual, Autonomous, Assisted, etc.).
+4. **Teachers**: Tick **"Show only my coverage"** to isolate classes you need to substitute for today.
+5. **Exporting**:
+   * Click **Export CSV** to download a spreadsheet.
+   * Press `Ctrl + P` to trigger a clean, sidebar-free PDF print layout.
 
 ---
 
 ## Production Deployment
 
 See `DEPLOYMENT.md` for full instructions (Gunicorn + Nginx + systemd, SSL, database backups, environment checklist).
-
----
-
-## Admin Guide
-
-1. **Log in with bootstrap credentials** (`admin` / `admin`) and set new ones immediately (forced).
-2. **Create Secondary Admins** if needed (max 3 active) via Settings.
-3. **Configure institution data:** Departments → Subjects → Classes → Rooms.
-4. **Set up the Academic Calendar** (see next section) — create an Academic Year and Semester, then mark working days with Day Orders and any known holidays/exam days.
-5. **Build the timetable** — assign teacher + subject + class + room to each Day Order + period (1–5); conflicts are rejected with a specific reason.
-6. **Operate:** review leave requests, assign substitutes, monitor credit balances, run calendar/workload reports.
 
 ---
 
