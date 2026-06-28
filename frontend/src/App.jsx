@@ -22,6 +22,9 @@ import AdminSettings from './pages/admin/Settings'
 import AcademicCalendar from './pages/admin/AcademicCalendar'
 import AcademicCalendarReports from './pages/admin/AcademicCalendarReports'
 
+// Common pages
+import TodaySubstitutions from './pages/common/TodaySubstitutions'
+
 // Teacher pages
 import TeacherDashboard from './pages/teacher/Dashboard'
 import MyTimetable from './pages/teacher/Timetable'
@@ -29,6 +32,7 @@ import ApplyLeave from './pages/teacher/ApplyLeave'
 import LeaveHistory from './pages/teacher/LeaveHistory'
 import MyCredits from './pages/teacher/Credits'
 import SubstitutionPreferences from './pages/teacher/Preferences'
+import TeacherSubstitution from './pages/teacher/Substitution'
 
 export default function App() {
   return (
@@ -62,6 +66,7 @@ export default function App() {
               <Route path="/admin/classes" element={<AdminClasses />} />
               <Route path="/admin/rooms" element={<AdminRooms />} />
               <Route path="/admin/resource-availability" element={<ResourceAvailability />} />
+              <Route path="/admin/today-substitutions" element={<TodaySubstitutions />} />
               <Route path="/admin/settings" element={<AdminSettings />} />
             </Route>
           </Route>
@@ -75,6 +80,8 @@ export default function App() {
               <Route path="/teacher/timetable" element={<MyTimetable />} />
               <Route path="/teacher/leave/apply" element={<ApplyLeave />} />
               <Route path="/teacher/leaves" element={<LeaveHistory />} />
+              <Route path="/teacher/substitution" element={<TeacherSubstitution />} />
+              <Route path="/teacher/today-coverage" element={<TodaySubstitutions />} />
               <Route path="/teacher/credits" element={<MyCredits />} />
               <Route path="/teacher/preferences" element={<SubstitutionPreferences />} />
             </Route>

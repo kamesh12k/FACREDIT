@@ -22,6 +22,7 @@ export const adminApi = {
 export const teachersApi = {
   list: () => api.get('/teachers/'),
   create: (data) => api.post('/teachers/', data),
+  update: (id, data) => api.put(`/teachers/${id}`, data),
   me: () => api.get('/teachers/me'),
   credits: (id) => api.get(`/teachers/${id}/credits`),
 }
@@ -122,6 +123,9 @@ export const leavesApi = {
   overrideSubstitute: (id, newSubstituteId) => api.post(`/leaves/${id}/override`, { new_substitute_teacher_id: newSubstituteId }),
   undoAssignment: (id) => api.post(`/leaves/${id}/undo-assignment`),
   setLock: (id, locked) => api.post(`/leaves/${id}/lock`, { locked }),
+  cancel: (id) => api.post(`/leaves/${id}/cancel`),
+  adminCancel: (id, reason) => api.post(`/leaves/${id}/admin-cancel`, { reason }),
+  cancelImpact: (id) => api.get(`/leaves/${id}/cancel-impact`),
 }
 
 export const campusOperationsApi = {
@@ -145,4 +149,24 @@ export const creditsApi = {
   myTransactions: () => api.get('/credits/my/transactions'),
   allTransactions: () => api.get('/credits/transactions'),
   report: () => api.get('/credits/report'),
+  adjust: (data) => api.post('/credits/adjust', data),
+}
+
+export const teacherSubstitutionApi = {
+  enabled: () => api.get('/teacher/substitution/enabled'),
+  myLeaves: () => api.get('/teacher/substitution/my-leaves'),
+  candidates: (leaveId) => api.get(`/teacher/substitution/leave/${leaveId}/candidates`),
+  assign: (leaveId, substituteId) => api.post(`/teacher/substitution/leave/${leaveId}/assign/${substituteId}`),
+  override: (leaveId, substituteId) => api.put(`/teacher/substitution/leave/${leaveId}/override/${substituteId}`),
+  clearAllAssignments: () => api.delete('/teacher/substitution/clear-all-assignments'),
+  resetPreferences: () => api.delete('/teacher/substitution/reset-preferences'),
+}
+
+export const teachersModeApi = {
+  getConfig: () => api.get('/teacher/substitution/config'),
+  updateConfig: (data) => api.put('/teacher/substitution/config', data),
+}
+
+export const substitutionsApi = {
+  getToday: (dateStr) => api.get('/substitutions/today', { params: dateStr ? { date: dateStr } : {} }),
 }

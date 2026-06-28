@@ -54,6 +54,7 @@ const ASSIGNMENT_TYPE_STYLES = {
   auto_swapped: 'bg-purple-100 text-purple-700',
   overridden: 'bg-amber-100 text-amber-700',
   emergency: 'bg-red-100 text-red-700',
+  teacher_assigned: 'bg-emerald-100 text-emerald-700',
 }
 
 const ASSIGNMENT_TYPE_LABELS = {
@@ -63,6 +64,7 @@ const ASSIGNMENT_TYPE_LABELS = {
   auto_swapped: 'Auto Swapped',
   overridden: 'Overridden',
   emergency: 'Emergency',
+  teacher_assigned: 'Teacher Assigned',
 }
 
 export function AssignmentTypeBadge({ type, small = false }) {

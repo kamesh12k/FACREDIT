@@ -10,7 +10,7 @@ import app.models  # ensure all models are registered with Base before create_al
 from app.routes import (
     auth, teachers, timetable, leaves, credits, notifications,
     departments, subjects, classes, rooms, day_order, admin, academic_calendar,
-    campus_operations,
+    campus_operations, teacher_substitution, substitutions,
 )
 from app.services.admin_service import bootstrap_default_super_admin
 
@@ -56,6 +56,8 @@ app.include_router(rooms.router)
 app.include_router(day_order.router)
 app.include_router(academic_calendar.router)
 app.include_router(campus_operations.router)
+app.include_router(teacher_substitution.router)
+app.include_router(substitutions.router)
 
 
 @app.get("/health", tags=["Health"])

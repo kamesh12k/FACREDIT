@@ -4,10 +4,26 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.core.dependencies import require_admin, get_current_user
 from app.models.user import User
-from app.schemas.credit import CreditTransactionOut, CreditReportEntry
-from app.services.credit_service import get_transactions, get_all_transactions, get_credit_report
+from app.schemas.credit import CreditTransactionOut, CreditReportEntry, CreditAdjustment
+from app.services.credit_service import get_transactions, get_all_transactions, get_credit_report, apply_credit_change
+from app.services.admin_service import log_audit_event
 
 router = APIRouter(prefix="/credits", tags=["Credits"])
+
+
+@router.post("/adjust")
+def adjust_credits(
+    data: CreditAdjustment,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    apply_credit_change(data.teacher_id, data.change, data.reason, None, db)
+    log_audit_event(
+        db, admin.id, "credits.manual_adjust", "user", data.teacher_id,
+        {"change": data.change, "reason": data.reason}
+    )
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/my/transactions", response_model=list[CreditTransactionOut])

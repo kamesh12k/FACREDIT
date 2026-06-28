@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { adminApi, campusOperationsApi } from '../../api/services'
+import { adminApi, campusOperationsApi, teachersModeApi } from '../../api/services'
 import { Spinner, ErrorAlert, EmptyState, Modal } from '../../components/ui'
 import { SparklesIcon } from '../../components/icons'
 
@@ -20,8 +20,7 @@ const MODE_INFO = {
   },
 }
 
-function CampusOperationsModePanel({ isSuperAdmin }) {
-  const [mode, setMode] = useState(null)
+function CampusOperationsModePanel({ isSuperAdmin, mode, setMode }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -108,6 +107,109 @@ function CampusOperationsModePanel({ isSuperAdmin }) {
           </div>
         </div>
       </Modal>
+    </div>
+  )
+}
+
+function TeachersModeSettings({ isSuperAdmin, campusMode }) {
+  const [enabled, setEnabled] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
+
+  useEffect(() => {
+    teachersModeApi.getConfig()
+      .then(r => {
+        setEnabled(r.data.teacher_self_management_enabled)
+      })
+      .catch(err => {
+        setError(err.response?.data?.detail || 'Failed to load teacher settings.')
+      })
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleToggle = async (val) => {
+    setError('')
+    setSuccess(false)
+    setSaving(true)
+    try {
+      const { data } = await teachersModeApi.updateConfig({ teacher_self_management_enabled: val })
+      setEnabled(data.teacher_self_management_enabled)
+      setSuccess(true)
+      setTimeout(() => setSuccess(false), 3000)
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to update settings.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="card overflow-hidden mb-6">
+        <div className="flex justify-center py-10"><Spinner /></div>
+      </div>
+    )
+  }
+
+  const isBypassed = campusMode === 'autonomous'
+
+  return (
+    <div className="card overflow-hidden mb-6">
+      <div className="px-5 py-4 border-b border-gray-100">
+        <h2 className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
+          Teacher Self-Management
+        </h2>
+        <p className="text-xs text-gray-400 mt-0.5">Allows teachers to manage substitute assignments for their own approved leaves</p>
+      </div>
+      <div className="p-5 space-y-4">
+        <ErrorAlert message={error} />
+        {success && (
+          <div className="p-3 bg-green-50 border border-green-200 text-green-700 text-xs rounded-lg animate-fade-in">
+            Settings saved successfully.
+          </div>
+        )}
+
+        {isBypassed && (
+          <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-lg flex items-start gap-2">
+            <svg className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div>
+              <span className="font-semibold">Bypassed:</span> Campus Operations Mode is currently set to Autonomous. Teachers cannot manually manage assignments in Autonomous mode.
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="text-sm font-semibold text-gray-800">Teacher Self-Management Permission</span>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {enabled
+                ? 'Teachers can manually select substitutes and override assignments for their leaves.'
+                : 'Teachers cannot assign substitutes or modify coverage assignments.'}
+            </p>
+          </div>
+          <button
+            onClick={() => isSuperAdmin && !isBypassed && handleToggle(!enabled)}
+            disabled={!isSuperAdmin || isBypassed || saving}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+              enabled && !isBypassed ? 'bg-primary-600' : 'bg-gray-200'
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                enabled && !isBypassed ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+
+        {!isSuperAdmin && (
+          <p className="text-xs text-gray-400 pt-1">Only a Super Admin can change this setting.</p>
+        )}
+      </div>
     </div>
   )
 }
@@ -324,6 +426,7 @@ function FactoryResetPanel() {
 
 export default function AdminSettings() {
   const { isSuperAdmin } = useAuth()
+  const [campusMode, setCampusMode] = useState('assisted')
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -332,7 +435,8 @@ export default function AdminSettings() {
         <p className="text-sm text-gray-500 mt-0.5">Admin accounts, audit history, and system reset</p>
       </div>
 
-      <CampusOperationsModePanel isSuperAdmin={isSuperAdmin} />
+      <CampusOperationsModePanel isSuperAdmin={isSuperAdmin} mode={campusMode} setMode={setCampusMode} />
+      <TeachersModeSettings isSuperAdmin={isSuperAdmin} campusMode={campusMode} />
       <AdminsPanel isSuperAdmin={isSuperAdmin} />
       <AuditLogPanel />
       {isSuperAdmin && <FactoryResetPanel />}

@@ -56,7 +56,7 @@ export default function MyTimetable() {
                     <div key={slot.id} className="px-4 py-3 flex items-center gap-3">
                       <span className="text-xs font-mono font-semibold text-gray-400 w-6">P{slot.period_number}</span>
                       <div>
-                        <p className="text-sm font-medium text-gray-800">{subject ? `${subject.name} (${subject.code})` : `Subject #${slot.subject_id}`}</p>
+                        <p className="text-sm font-medium text-gray-800">{slot.subject_id ? (subject ? `${subject.name} (${subject.code})` : `Subject #${slot.subject_id}`) : 'Assigned Class'}</p>
                         <p className="text-xs text-gray-400">
                           {cls ? `${cls.name} - ${cls.section}` : ''}{room ? ` · ${room.room_number}` : ''}
                         </p>

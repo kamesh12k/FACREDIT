@@ -95,3 +95,21 @@ class FreeTeacherOut(BaseModel):
     department: str | None
 
     model_config = {"from_attributes": True}
+
+
+class AdminCancelRequest(BaseModel):
+    reason: str
+
+
+class CancelImpactOut(BaseModel):
+    """Preview of what will be affected if this leave is cancelled."""
+    leave_id: int
+    leave_date: date
+    day_order: int
+    period_number: int
+    teacher_name: str
+    has_substitute: bool
+    substitute_name: str | None = None
+    substitute_id: int | None = None
+    assignment_type: str | None = None
+

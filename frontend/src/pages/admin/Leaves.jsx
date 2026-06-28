@@ -42,6 +42,8 @@ export default function AdminLeaves() {
   const [selected, setSelected] = useState(new Set())
   const [assignModal, setAssignModal] = useState(null)
   const [overrideModal, setOverrideModal] = useState(null)
+  const [cancelModal, setCancelModal] = useState(null)
+  const [cancelReason, setCancelReason] = useState('')
   const [actionLoading, setActionLoading] = useState(null)
 
   const load = () => leavesApi.all().then(r => setLeaves(r.data)).finally(() => setLoading(false))
@@ -153,6 +155,30 @@ export default function AdminLeaves() {
     setActionLoading(leave.id + '_lock')
     try { await leavesApi.setLock(leave.id, locked); load() }
     finally { setActionLoading(null) }
+  }
+
+  const openCancelModal = async (leave) => {
+    setActionLoading(leave.id + '_cancel_open')
+    try {
+      const { data: impact } = await leavesApi.cancelImpact(leave.id)
+      setCancelModal({ leave, impact })
+      setCancelReason('')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleAdminCancel = async () => {
+    if (!cancelModal || !cancelReason.trim()) return
+    setActionLoading('admin_cancel')
+    try {
+      await leavesApi.adminCancel(cancelModal.leave.id, cancelReason.trim())
+      setCancelModal(null)
+      setCancelReason('')
+      load()
+    } finally {
+      setActionLoading(null)
+    }
   }
 
   return (
@@ -278,6 +304,16 @@ export default function AdminLeaves() {
                           </button>
                         </div>
                       )}
+                      {leave.status !== 'cancelled' && leave.status !== 'rejected' && (
+                        <button
+                          onClick={() => openCancelModal(leave)}
+                          disabled={!!actionLoading}
+                          title="Cancel this leave"
+                          className="text-xs px-2 py-1 border border-red-200 text-red-500 rounded-lg hover:bg-red-50 hover:text-red-700 transition-colors disabled:opacity-30 font-medium"
+                        >
+                          {actionLoading === leave.id + '_cancel_open' ? '...' : 'Cancel'}
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -360,6 +396,58 @@ export default function AdminLeaves() {
                   ))}
               </div>
             )}
+          </div>
+        )}
+      </Modal>
+
+      {/* Admin Cancel Leave */}
+      <Modal open={!!cancelModal} onClose={() => { setCancelModal(null); setCancelReason('') }} title="Cancel Leave Request">
+        {cancelModal && (
+          <div className="space-y-4">
+            <div className="bg-red-50 border border-red-100 rounded-lg p-3 text-sm">
+              <p className="font-semibold text-red-800">
+                Cancel leave for {cancelModal.impact.teacher_name}
+              </p>
+              <p className="text-red-600 text-xs mt-0.5">
+                {cancelModal.impact.leave_date} &middot; Day Order {cancelModal.impact.day_order} &middot; Period {cancelModal.impact.period_number}
+              </p>
+            </div>
+
+            {cancelModal.impact.has_substitute && (
+              <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-amber-800">
+                <p className="font-semibold">Warning: Substitute is currently assigned</p>
+                <p className="mt-0.5">Substitute: <span className="font-medium">{cancelModal.impact.substitute_name}</span></p>
+                <p className="mt-0.5">Assignment type: <span className="font-medium">{cancelModal.impact.assignment_type?.replace('_', ' ')}</span></p>
+                <p className="text-amber-600 mt-1">This assignment will be removed and credits will be reversed.</p>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Reason for cancellation *</label>
+              <textarea
+                className="tt-input w-full text-sm"
+                rows={3}
+                value={cancelReason}
+                onChange={e => setCancelReason(e.target.value)}
+                placeholder="Enter reason for cancelling this leave..."
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => { setCancelModal(null); setCancelReason('') }}
+                className="text-xs px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Keep Leave
+              </button>
+              <button
+                onClick={handleAdminCancel}
+                disabled={!cancelReason.trim() || actionLoading === 'admin_cancel'}
+                className="text-xs px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 font-semibold"
+              >
+                {actionLoading === 'admin_cancel' ? 'Cancelling...' : 'Confirm Cancel'}
+              </button>
+            </div>
           </div>
         )}
       </Modal>

@@ -25,3 +25,9 @@ class CreditReportEntry(BaseModel):
     name: str
     department: str | None
     balance: int
+
+
+class CreditAdjustment(BaseModel):
+    teacher_id: int
+    change: int
+    reason: str

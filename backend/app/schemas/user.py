@@ -52,3 +52,11 @@ class UserCreate(BaseModel):
         if self.role != Role.teacher:
             raise ValueError("Use the Secondary Admin endpoint to create admin accounts")
         return self
+
+
+class UserUpdate(BaseModel):
+    name: str
+    email: EmailStr
+    department: str | None = None
+    is_active: bool
+    password: str | None = None

@@ -7,12 +7,22 @@ export default function AdminSubjects() {
   const [departments, setDepartments] = useState([])
   const [showArchived, setShowArchived] = useState(false)
   const [loading, setLoading] = useState(true)
+
+  // Add Subject State
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState({ code: '', name: '', subject_type: 'theory', credits: 3, department_id: '', semester: 1 })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  // Edit Subject State
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [selectedSubject, setSelectedSubject] = useState(null)
+  const [editForm, setEditForm] = useState({ code: '', name: '', subject_type: 'theory', credits: 3, department_id: '', semester: 1 })
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState('')
+
   const load = () => subjectsApi.list(showArchived).then(r => setSubjects(r.data)).finally(() => setLoading(false))
+
   useEffect(() => { load() }, [showArchived])
   useEffect(() => { departmentsApi.list().then(r => setDepartments(r.data)) }, [])
 
@@ -32,19 +42,61 @@ export default function AdminSubjects() {
     }
   }
 
-  const toggleArchive = async (s) => {
-    if (s.is_archived) await subjectsApi.unarchive(s.id)
-    else await subjectsApi.archive(s.id)
-    load()
+  const handleOpenEditModal = (subject) => {
+    setSelectedSubject(subject)
+    setEditForm({
+      code: subject.code,
+      name: subject.name,
+      subject_type: subject.subject_type,
+      credits: subject.credits,
+      department_id: subject.department_id,
+      semester: subject.semester,
+    })
+    setEditError('')
+    setEditModalOpen(true)
   }
+
+  const handleUpdate = async (e) => {
+    e.preventDefault()
+    setEditError('')
+    setEditSaving(true)
+    try {
+      await subjectsApi.update(selectedSubject.id, {
+        code: editForm.code,
+        name: editForm.name,
+        subject_type: editForm.subject_type,
+        credits: Number(editForm.credits),
+        department_id: Number(editForm.department_id),
+        semester: Number(editForm.semester),
+      })
+      setEditModalOpen(false)
+      load()
+    } catch (err) {
+      setEditError(err.response?.data?.detail || 'Failed to update subject.')
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
+  const toggleArchive = async (s) => {
+    try {
+      if (s.is_archived) await subjectsApi.unarchive(s.id)
+      else await subjectsApi.archive(s.id)
+      load()
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to toggle subject status.')
+    }
+  }
+
+  const deptName = (id) => departments.find(d => d.id === id)?.name || '—'
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-gray-900">Subjects</h1>
         <div className="flex items-center gap-3">
-          <label className="flex items-center gap-1.5 text-xs text-gray-500">
-            <input type="checkbox" checked={showArchived} onChange={e => setShowArchived(e.target.checked)} />
+          <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer font-medium">
+            <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" checked={showArchived} onChange={e => setShowArchived(e.target.checked)} />
             Show archived
           </label>
           <button onClick={() => setModalOpen(true)} className="btn-primary text-sm">+ Add Subject</button>
@@ -58,7 +110,7 @@ export default function AdminSubjects() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
-                {['Code', 'Name', 'Type', 'Credits', 'Semester', 'Status', ''].map(h => (
+                {['Code', 'Name', 'Type', 'Credits', 'Department', 'Semester', 'Status', ''].map(h => (
                   <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
@@ -70,16 +122,20 @@ export default function AdminSubjects() {
                   <td className="px-5 py-3 font-medium text-gray-800">{s.name}</td>
                   <td className="px-5 py-3 text-gray-500 capitalize">{s.subject_type}</td>
                   <td className="px-5 py-3 text-gray-500">{s.credits}</td>
+                  <td className="px-5 py-3 text-gray-500">{deptName(s.department_id)}</td>
                   <td className="px-5 py-3 text-gray-500">Sem {s.semester}</td>
                   <td className="px-5 py-3">
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${s.is_archived ? 'bg-gray-100 text-gray-500' : 'bg-green-100 text-green-700'}`}>
+                    <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${s.is_archived ? 'bg-gray-100 text-gray-500' : 'bg-green-100 text-green-700'}`}>
                       {s.is_archived ? 'Archived' : 'Active'}
                     </span>
                   </td>
-                  <td className="px-5 py-3">
-                    <button onClick={() => toggleArchive(s)} className="text-xs text-primary-600 hover:underline">
-                      {s.is_archived ? 'Unarchive' : 'Archive'}
-                    </button>
+                  <td className="px-5 py-3 text-right">
+                    <div className="flex justify-end gap-3">
+                      <button onClick={() => handleOpenEditModal(s)} className="text-xs text-primary-600 hover:text-primary-800 font-semibold hover:underline">Edit</button>
+                      <button onClick={() => toggleArchive(s)} className="text-xs text-gray-500 hover:text-gray-700 font-semibold hover:underline">
+                        {s.is_archived ? 'Unarchive' : 'Archive'}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -88,16 +144,17 @@ export default function AdminSubjects() {
         )}
       </div>
 
+      {/* Add Subject Modal */}
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Add Subject">
         <form onSubmit={handleCreate} className="space-y-4">
           <ErrorAlert message={error} />
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Code</label>
-            <input type="text" required className="input" value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} />
+            <input type="text" required className="input" placeholder="CS-202" value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Name</label>
-            <input type="text" required className="input" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+            <input type="text" required className="input" placeholder="Data Structures" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Type</label>
@@ -126,6 +183,48 @@ export default function AdminSubjects() {
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={() => setModalOpen(false)} className="btn-secondary flex-1">Cancel</button>
             <button type="submit" disabled={saving} className="btn-primary flex-1">{saving ? 'Saving…' : 'Create'}</button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit Subject Modal */}
+      <Modal open={editModalOpen} onClose={() => setEditModalOpen(false)} title="Edit Subject">
+        <form onSubmit={handleUpdate} className="space-y-4">
+          <ErrorAlert message={editError} />
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Code</label>
+            <input type="text" required className="input" value={editForm.code} onChange={e => setEditForm({ ...editForm, code: e.target.value })} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Name</label>
+            <input type="text" required className="input" value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Type</label>
+            <select className="input" value={editForm.subject_type} onChange={e => setEditForm({ ...editForm, subject_type: e.target.value })}>
+              <option value="theory">Theory</option>
+              <option value="lab">Lab</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Credits</label>
+            <input type="number" min={1} required className="input" value={editForm.credits} onChange={e => setEditForm({ ...editForm, credits: e.target.value })} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Department</label>
+            <select required className="input" value={editForm.department_id} onChange={e => setEditForm({ ...editForm, department_id: e.target.value })}>
+              {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Semester</label>
+            <select className="input" value={editForm.semester} onChange={e => setEditForm({ ...editForm, semester: e.target.value })}>
+              {[1, 2, 3, 4, 5, 6, 7, 8].map(s => <option key={s} value={s}>Semester {s}</option>)}
+            </select>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={() => setEditModalOpen(false)} className="btn-secondary flex-1">Cancel</button>
+            <button type="submit" disabled={editSaving} className="btn-primary flex-1">{editSaving ? 'Saving…' : 'Save Changes'}</button>
           </div>
         </form>
       </Modal>

@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
 import {
   GridIcon, UsersIcon, CalIcon, BookIcon, DoorIcon, DocIcon, ChartIcon,
-  PlusIcon, SettingsIcon, LogoutIcon,
+  PlusIcon, SettingsIcon, LogoutIcon, SwapIcon,
 } from '../icons'
 
 function NavItem({ to, icon, label, end }) {
@@ -47,6 +47,7 @@ const ADMIN_NAV = [
     section: 'Leave & Credits',
     items: [
       { to: '/admin/leaves', label: 'Leave Requests', icon: <DocIcon /> },
+      { to: '/admin/today-substitutions', label: "Today's Substitutions", icon: <DocIcon /> },
       { to: '/admin/credits', label: 'Credits', icon: <ChartIcon /> },
     ],
   },
@@ -69,6 +70,8 @@ const TEACHER_NAV = [
       { to: '/teacher/timetable', label: 'My Timetable', icon: <CalIcon /> },
       { to: '/teacher/leave/apply', label: 'Apply for Leave', icon: <PlusIcon /> },
       { to: '/teacher/leaves', label: 'Leave History', icon: <DocIcon /> },
+      { to: '/teacher/substitution', label: 'Manage Substitutes', icon: <SwapIcon /> },
+      { to: '/teacher/today-coverage', label: "Today's Coverage", icon: <DocIcon /> },
       { to: '/teacher/credits', label: 'My Credits', icon: <ChartIcon /> },
     ],
   },

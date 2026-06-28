@@ -10,6 +10,7 @@ class LeaveStatus(str, enum.Enum):
     pending = "pending"
     approved = "approved"
     rejected = "rejected"
+    cancelled = "cancelled"
 
 
 class AssignmentType(str, enum.Enum):
@@ -23,6 +24,7 @@ class AssignmentType(str, enum.Enum):
     auto_swapped = "auto_swapped"                 # Self-healing engine re-routed an existing assignment
     overridden = "overridden"                     # Admin replaced an existing (often auto) assignment
     emergency = "emergency"                       # Leave submitted inside the emergency window
+    teacher_assigned = "teacher_assigned"         # Teacher self-assigned substitute in teacher_mode
 
 
 class LeaveRequest(Base):

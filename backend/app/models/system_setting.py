@@ -33,4 +33,5 @@ DEFAULT_SYSTEM_SETTINGS = {
     # deliberately turned that on.
     "campus_operations_mode": "assisted",
     "emergency_window_hours": "2",
+    "teacher_self_management_enabled": "false",
 }

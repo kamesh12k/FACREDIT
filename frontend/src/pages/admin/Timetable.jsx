@@ -6,8 +6,9 @@ import { Spinner } from '../../components/ui'
 const DAY_ORDERS = [1, 2, 3, 4, 5, 6]
 const PERIODS    = [1, 2, 3, 4, 5]
 
-const DAY_SHORT = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat' }
-const DAY_FULL  = { 1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday' }
+
+const DAY_SHORT = { 1: 'DO1', 2: 'DO2', 3: 'DO3', 4: 'DO4', 5: 'DO5', 6: 'DO6' }
+const DAY_FULL  = { 1: 'Day Order 1', 2: 'Day Order 2', 3: 'Day Order 3', 4: 'Day Order 4', 5: 'Day Order 5', 6: 'Day Order 6' }
 const PERIOD_TIMES = {
   1: '8:00–9:00',
   2: '9:00–10:00',
@@ -30,6 +31,9 @@ const SUBJECT_COLORS = [
 const colorMap = {}
 let colorIdx = 0
 function getColor(subjectId) {
+  if (subjectId === null || subjectId === undefined) {
+    return { bg: '#EEF2FF', text: '#4F46E5', border: '#C7D2FE' }
+  }
   if (!colorMap[subjectId]) colorMap[subjectId] = SUBJECT_COLORS[colorIdx++ % SUBJECT_COLORS.length]
   return colorMap[subjectId]
 }
@@ -110,6 +114,21 @@ export default function AdminTimetable() {
   const [editRoom,          setEditRoom]          = useState('')
   const [poppedCells,       setPoppedCells]       = useState(new Set())
 
+  const [selectedClassId,   setSelectedClassId]   = useState('')
+  const [selectedSubjectId, setSelectedSubjectId] = useState('')
+  const [selectedRoomId,    setSelectedRoomId]    = useState('')
+
+  useEffect(() => {
+    setSelectedClassId('')
+    setSelectedSubjectId('')
+    setSelectedRoomId('')
+    if (selectedCell?.slot) {
+      setEditRoom(selectedCell.slot.room_id ? String(selectedCell.slot.room_id) : '')
+    } else {
+      setEditRoom('')
+    }
+  }, [selectedCell])
+
   // ── Slot history ──────────────────────────────────────────────────────────
   const [history, dispatch] = useReducer(historyReducer, { past: [], present: [], future: [] })
   const slots = history.present
@@ -124,8 +143,8 @@ export default function AdminTimetable() {
   // ── Enrich slot ───────────────────────────────────────────────────────────
   const enrich = useCallback((slot, subjs, clss, rms) => ({
     ...slot,
-    subject_name: subjs.find(x => x.id === slot.subject_id)?.name  || `Subject #${slot.subject_id}`,
-    subject_code: subjs.find(x => x.id === slot.subject_id)?.code  || '???',
+    subject_name: slot.subject_id ? (subjs.find(x => x.id === slot.subject_id)?.name || `Subject #${slot.subject_id}`) : 'Assigned',
+    subject_code: slot.subject_id ? (subjs.find(x => x.id === slot.subject_id)?.code || '???') : '',
     class_name:   (() => { const c = clss.find(x => x.id === slot.class_id); return c ? `${c.name}-${c.section}` : `Class #${slot.class_id}` })(),
     room_name:    rms.find(x => x.id === slot.room_id)?.room_number || '',
   }), [])
@@ -259,6 +278,30 @@ export default function AdminTimetable() {
       toast(err.response?.data?.detail || 'Failed to update room', 'error')
     } finally { setSaving(false) }
   }, [slots, subjects, classes, rooms, enrich, toast])
+
+  const handleAssignFromPanel = async () => {
+    if (!selectedCell || !selectedClassId || !selectedTeacherId) return
+    setSaving(true)
+    try {
+      const res = await timetableApi.createSlot({
+        teacher_id:    Number(selectedTeacherId),
+        subject_id:    selectedSubjectId ? Number(selectedSubjectId) : null,
+        class_id:      Number(selectedClassId),
+        room_id:       selectedRoomId ? Number(selectedRoomId) : null,
+        day_order:     selectedCell.day_order,
+        period_number: selectedCell.period_number,
+      })
+      const enrichedSlot = enrich(res.data, subjects, classes, rooms)
+      dispatch({ type: 'SET', payload: [...slots, enrichedSlot] })
+      popCell(selectedCell.day_order, selectedCell.period_number)
+      toast('Slot assigned successfully')
+      setSelectedCell(null)
+    } catch (err) {
+      toast(err.response?.data?.detail || 'Failed to assign slot', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   // ── Cell click ────────────────────────────────────────────────────────────
   const handleCellClick = useCallback((day, period) => {
@@ -544,7 +587,7 @@ export default function AdminTimetable() {
                         onDragOver={e => { e.preventDefault(); setDragOver({ day, period }) }}
                         onDragLeave={() => setDragOver(null)}
                         onDrop={() => handleDrop(day, period)}
-                        title={conflict || (slot ? `${slot.subject_name} · ${slot.class_name}` : `${DAY_SHORT[day]} · Period ${period}`)}
+                        title={conflict || (slot ? `${slot.subject_id ? slot.subject_name : 'Assigned'} · ${slot.class_name}` : `${DAY_SHORT[day]} · Period ${period}`)}
                       >
                         {slot && color && (
                           <div className="cell-top-bar" style={{ background: color.border }} />
@@ -552,7 +595,7 @@ export default function AdminTimetable() {
 
                         {slot ? (
                           <div className="cell-content">
-                            <span className="cell-code">{abbrev(slot.subject_code || slot.subject_name)}</span>
+                            <span className="cell-code">{slot.subject_id ? (slot.subject_code || abbrev(slot.subject_name)) : "Assigned"}</span>
                             <span className="cell-class">{slot.class_name}</span>
                             {slot.room_name && <span className="cell-room">{slot.room_name}</span>}
                           </div>
@@ -654,10 +697,71 @@ export default function AdminTimetable() {
                   </button>
                 </>
               ) : (
-                <div className="cd-empty">
-                  {activeSubject
-                    ? <><strong style={{ color: '#4F46E5' }}>{activeSubject.subject.code}</strong> is ready — click again to assign</>
-                    : 'Empty slot. Pick a subject from the left to assign it here.'}
+                <div className="space-y-4 pt-4 border-t border-gray-100 mt-4">
+                  {activeSubject ? (
+                    <div className="cd-empty">
+                      <strong style={{ color: '#4F46E5' }}>{activeSubject.subject.code}</strong> is ready — click again to assign
+                    </div>
+                  ) : (
+                    <div className="space-y-3" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Assign Class Section</div>
+                      
+                      <div>
+                        <label className="block text-[10px] font-medium text-gray-500 mb-1" style={{ display: 'block', fontSize: '10px', color: '#64748B', marginBottom: '3px' }}>Class Section *</label>
+                        <select
+                          className="tt-select w-full"
+                          value={selectedClassId}
+                          onChange={e => setSelectedClassId(e.target.value)}
+                          style={{ width: '100%', boxSizing: 'border-box' }}
+                        >
+                          <option value="">Select class section…</option>
+                          {classes.map(c => (
+                            <option key={c.id} value={c.id}>{c.name} - {c.section}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-medium text-gray-500 mb-1" style={{ display: 'block', fontSize: '10px', color: '#64748B', marginBottom: '3px' }}>Subject (Optional)</label>
+                        <select
+                          className="tt-select w-full"
+                          value={selectedSubjectId}
+                          onChange={e => setSelectedSubjectId(e.target.value)}
+                          style={{ width: '100%', boxSizing: 'border-box' }}
+                        >
+                          <option value="">None / General Duty</option>
+                          {subjects.map(s => (
+                            <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-medium text-gray-500 mb-1" style={{ display: 'block', fontSize: '10px', color: '#64748B', marginBottom: '3px' }}>Room (Optional)</label>
+                        <select
+                          className="tt-select w-full"
+                          value={selectedRoomId}
+                          onChange={e => setSelectedRoomId(e.target.value)}
+                          style={{ width: '100%', boxSizing: 'border-box' }}
+                        >
+                          <option value="">None / No Room</option>
+                          {rooms.map(r => (
+                            <option key={r.id} value={r.id}>{r.room_number}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="tt-btn tt-btn--primary w-full py-2 mt-2"
+                        onClick={handleAssignFromPanel}
+                        disabled={!selectedClassId || saving}
+                        style={{ width: '100%', display: 'block' }}
+                      >
+                        {saving ? 'Assigning…' : 'Assign Slot'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -876,6 +980,19 @@ const CSS = `
 }
 
 .tt-btn--danger:hover:not(:disabled) { background: #FEE2E2; border-color: #FCA5A5; }
+
+.tt-btn--primary {
+  background: #4F46E5;
+  border-color: #4F46E5;
+  color: #fff;
+  justify-content: center;
+}
+
+.tt-btn--primary:hover:not(:disabled) {
+  background: #4338CA;
+  border-color: #4338CA;
+  color: #fff;
+}
 
 .tt-btn-group {
   display: flex;

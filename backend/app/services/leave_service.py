@@ -1,18 +1,28 @@
 import uuid
 import logging
-from datetime import date
+from datetime import date, datetime
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
 from app.models.leave import LeaveRequest, LeaveStatus, AlterAssignment, AssignmentType
 from app.models.timetable import TimetableSlot
 from app.models.user import User, Role
-from app.schemas.leave import LeaveCreate, LeaveBatchCreate, FreeTeacherOut
+from app.schemas.leave import LeaveCreate, LeaveBatchCreate, FreeTeacherOut, CancelImpactOut
 from app.services.credit_service import apply_credit_change
 from app.services import day_order_service, notification_service, substitution_service
 from app.services.admin_service import log_audit_event
 
+from app.services.system_setting_service import get_setting
+
 logger = logging.getLogger(__name__)
+
+# ── Cancellation cutoff ────────────────────────────────────────────────
+SAME_DAY_CANCEL_CUTOFF_HOUR = 10  # 10:00 AM local time
+
+
+def should_auto_approve_leave(db: Session) -> bool:
+    from app.services.substitution_service import get_mode
+    return get_mode(db) == "autonomous"
 
 
 def submit_leave(teacher_id: int, data: LeaveCreate, db: Session) -> LeaveRequest:
@@ -22,18 +32,38 @@ def submit_leave(teacher_id: int, data: LeaveCreate, db: Session) -> LeaveReques
     assignments, or credit transactions."""
     calendar_day = day_order_service.assert_working_day_or_400(db, data.date)
 
+    auto_approve = should_auto_approve_leave(db)
+    status = LeaveStatus.approved if auto_approve else LeaveStatus.pending
+
     leave = LeaveRequest(
         teacher_id=teacher_id,
         date=data.date,
         day_order=calendar_day.day_order,
         period_number=data.period_number,
         reason=data.reason,
-        status=LeaveStatus.pending,
+        status=status,
     )
     substitution_service.mark_emergency_if_applicable(db, leave)
     db.add(leave)
     db.commit()
     db.refresh(leave)
+
+    if auto_approve:
+        log_audit_event(
+            db, None, "leave.auto_approved_by_system", "leave_request", leave.id, {}
+        )
+        notification_service.create_notification(
+            db, leave.teacher_id,
+            title="Leave approved",
+            body=f"Your leave for {leave.date} (Day Order {leave.day_order}, period {leave.period_number}) was approved automatically.",
+            event_type="leave_approved",
+            related_leave_id=leave.id,
+        )
+        db.commit()
+
+        substitution_service.auto_process_approved_leave(db, leave)
+        db.refresh(leave)
+
     return leave
 
 
@@ -90,6 +120,9 @@ def submit_leave_batch(teacher_id: int, data: LeaveBatchCreate, db: Session) -> 
     try:
         batch_id = uuid.uuid4()
         leaves = []
+        auto_approve = should_auto_approve_leave(db)
+        status = LeaveStatus.approved if auto_approve else LeaveStatus.pending
+
         for period in periods:
             leave = LeaveRequest(
                 teacher_id=teacher_id,
@@ -97,7 +130,7 @@ def submit_leave_batch(teacher_id: int, data: LeaveBatchCreate, db: Session) -> 
                 day_order=calendar_day.day_order,
                 period_number=period,
                 reason=data.reason,
-                status=LeaveStatus.pending,
+                status=status,
                 batch_id=batch_id,
             )
             substitution_service.mark_emergency_if_applicable(db, leave)
@@ -107,6 +140,26 @@ def submit_leave_batch(teacher_id: int, data: LeaveBatchCreate, db: Session) -> 
         db.commit()
         for leave in leaves:
             db.refresh(leave)
+
+        if auto_approve:
+            for leave in leaves:
+                log_audit_event(
+                    db, None, "leave.auto_approved_by_system", "leave_request", leave.id, {}
+                )
+                notification_service.create_notification(
+                    db, leave.teacher_id,
+                    title="Leave approved",
+                    body=f"Your leave for {leave.date} (Day Order {leave.day_order}, period {leave.period_number}) was approved automatically.",
+                    event_type="leave_approved",
+                    related_leave_id=leave.id,
+                )
+                db.commit()
+
+                substitution_service.auto_process_approved_leave(db, leave)
+            db.commit()
+            for leave in leaves:
+                db.refresh(leave)
+
         logger.info(
             "submit_leave_batch: created %d leave row(s) batch_id=%s teacher_id=%s date=%s",
             len(leaves), batch_id, teacher_id, data.date,
@@ -241,6 +294,7 @@ def assign_substitute(
     leave_id: int, substitute_id: int, db: Session, *,
     assignment_type: AssignmentType = AssignmentType.admin_assigned,
     compatibility_score: float | None = None,
+    actor_id: int | None = None,
 ) -> AlterAssignment:
     leave = _get_leave_or_404(leave_id, db)
 
@@ -262,7 +316,7 @@ def assign_substitute(
         raise HTTPException(status_code=400, detail="A teacher cannot be their own substitute")
 
     assignment = substitution_service.create_assignment(
-        db, leave, substitute, assignment_type, compatibility_score, actor_id=None,
+        db, leave, substitute, assignment_type, compatibility_score, actor_id=actor_id,
     )
     db.commit()
     db.refresh(assignment)
@@ -379,6 +433,170 @@ def set_assignment_lock(leave_id: int, locked: bool, actor: User, db: Session) -
     db.commit()
     db.refresh(existing)
     return existing
+
+
+# ── Leave Cancellation ──────────────────────────────────────────────────
+
+def _reverse_assignment_if_exists(leave: LeaveRequest, db: Session) -> int | None:
+    """If the leave has a substitute assignment, reverse the credits and
+    delete it. Returns the displaced substitute's user ID, or None."""
+    existing = leave.alter_assignment
+    if not existing:
+        return None
+
+    substitute_id = existing.substitute_teacher_id
+
+    # Reverse credits: give back to original teacher, take back from sub
+    apply_credit_change(
+        teacher_id=leave.teacher_id, change=+1,
+        reason=f"Leave cancelled: {leave.date} period {leave.period_number} reverted",
+        leave_id=leave.id, db=db,
+    )
+    apply_credit_change(
+        teacher_id=substitute_id, change=-1,
+        reason=f"Leave cancelled: substitute assignment for {leave.date} period {leave.period_number} removed",
+        leave_id=leave.id, db=db,
+    )
+
+    db.delete(existing)
+    return substitute_id
+
+
+def cancel_leave_by_teacher(
+    leave_id: int, teacher_id: int, db: Session, *, now: datetime | None = None,
+) -> LeaveRequest:
+    """Teacher cancels their own leave. Rules:
+    - Future date: always allowed
+    - Same day: only before 10:00 AM
+    - Past date: never allowed
+    The ``now`` parameter exists for testability."""
+    leave = _get_leave_or_404(leave_id, db)
+
+    if leave.teacher_id != teacher_id:
+        raise HTTPException(status_code=403, detail="You can only cancel your own leave requests")
+
+    if leave.status in (LeaveStatus.rejected, LeaveStatus.cancelled):
+        raise HTTPException(status_code=400, detail=f"Cannot cancel a leave that is already {leave.status.value}")
+
+    if now is None:
+        now = datetime.now()
+
+    today = now.date()
+
+    if leave.date < today:
+        raise HTTPException(status_code=400, detail="Past leave requests cannot be cancelled")
+
+    if leave.date == today and now.hour >= SAME_DAY_CANCEL_CUTOFF_HOUR:
+        raise HTTPException(
+            status_code=400,
+            detail="Same-day leave cancellation is only available before 10:00 AM. Please contact an administrator.",
+        )
+
+    # Determine cancellation type for audit
+    if leave.date > today:
+        cancellation_type = "future_leave"
+    else:
+        cancellation_type = "same_day_before_10am"
+
+    # Reverse any substitute assignment + credits
+    displaced_sub_id = _reverse_assignment_if_exists(leave, db)
+
+    leave.status = LeaveStatus.cancelled
+    log_audit_event(
+        db, teacher_id, "leave.cancelled_by_teacher", "leave_request", leave.id,
+        {
+            "cancellation_type": cancellation_type,
+            "cancellation_time": now.isoformat(),
+        },
+    )
+
+    # Notify the teacher
+    notification_service.create_notification(
+        db, leave.teacher_id,
+        title="Leave cancelled",
+        body=f"Your leave for {leave.date} (Day Order {leave.day_order}, period {leave.period_number}) has been cancelled.",
+        event_type="leave_cancelled",
+        related_leave_id=leave.id,
+    )
+
+    # Notify displaced substitute
+    if displaced_sub_id:
+        notification_service.create_notification(
+            db, displaced_sub_id,
+            title="Coverage assignment removed",
+            body=f"You are no longer covering {leave.date} period {leave.period_number} -- the original leave was cancelled.",
+            event_type="substitute_removed",
+            related_leave_id=leave.id,
+        )
+
+    db.commit()
+    db.refresh(leave)
+    return leave
+
+
+def cancel_leave_by_admin(
+    leave_id: int, admin: User, reason: str, db: Session,
+) -> LeaveRequest:
+    """Admin cancels any leave -- no date/time restrictions. A reason is
+    required for the audit trail."""
+    leave = _get_leave_or_404(leave_id, db)
+
+    if leave.status in (LeaveStatus.rejected, LeaveStatus.cancelled):
+        raise HTTPException(status_code=400, detail=f"Cannot cancel a leave that is already {leave.status.value}")
+
+    displaced_sub_id = _reverse_assignment_if_exists(leave, db)
+
+    leave.status = LeaveStatus.cancelled
+    log_audit_event(
+        db, admin.id, "leave.cancelled_by_admin_override", "leave_request", leave.id,
+        {
+            "reason": reason,
+            "cancellation_time": datetime.now().isoformat(),
+            "had_substitute": displaced_sub_id is not None,
+            "displaced_substitute_id": displaced_sub_id,
+        },
+    )
+
+    # Notify the teacher that their leave was cancelled
+    notification_service.create_notification(
+        db, leave.teacher_id,
+        title="Leave cancelled by admin",
+        body=f"Your leave for {leave.date} (Day Order {leave.day_order}, period {leave.period_number}) was cancelled by an administrator. Reason: {reason}",
+        event_type="leave_cancelled",
+        related_leave_id=leave.id,
+    )
+
+    if displaced_sub_id:
+        notification_service.create_notification(
+            db, displaced_sub_id,
+            title="Coverage assignment removed",
+            body=f"You are no longer covering {leave.date} period {leave.period_number} -- the leave was cancelled by an administrator.",
+            event_type="substitute_removed",
+            related_leave_id=leave.id,
+        )
+
+    db.commit()
+    db.refresh(leave)
+    return leave
+
+
+def get_cancel_impact(leave_id: int, db: Session) -> CancelImpactOut:
+    """Returns a preview of what will be affected if this leave is
+    cancelled -- used by the admin frontend to show a confirmation modal."""
+    leave = _get_leave_or_404(leave_id, db)
+    existing = leave.alter_assignment
+
+    return CancelImpactOut(
+        leave_id=leave.id,
+        leave_date=leave.date,
+        day_order=leave.day_order,
+        period_number=leave.period_number,
+        teacher_name=leave.teacher.name if leave.teacher else "Unknown",
+        has_substitute=existing is not None,
+        substitute_name=existing.substitute.name if existing and existing.substitute else None,
+        substitute_id=existing.substitute_teacher_id if existing else None,
+        assignment_type=existing.assignment_type.value if existing else None,
+    )
 
 
 def _get_leave_or_404(leave_id: int, db: Session) -> LeaveRequest:

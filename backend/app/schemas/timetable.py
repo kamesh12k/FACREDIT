@@ -5,7 +5,7 @@ from app.schemas.validators import validate_period_number, validate_day_order
 
 class TimetableSlotCreate(BaseModel):
     teacher_id: int
-    subject_id: int
+    subject_id: int | None = None
     class_id: int
     room_id: int | None = None
     day_order: int
@@ -25,7 +25,7 @@ class TimetableSlotCreate(BaseModel):
 class TimetableSlotOut(BaseModel):
     id: int
     teacher_id: int
-    subject_id: int
+    subject_id: int | None
     class_id: int
     room_id: int | None
     day_order: int

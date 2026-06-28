@@ -29,6 +29,7 @@ from app.models.leave import LeaveRequest, LeaveStatus, AlterAssignment, Assignm
 from app.models.timetable import TimetableSlot
 from app.models.subject import Subject
 from app.models.department import Department
+from app.models.class_ import Class
 from app.models.substitution_preference import SubstitutionPreference
 from app.models.system_setting import SystemSetting, CAMPUS_OPERATIONS_MODES
 from app.services.credit_service import apply_credit_change
@@ -232,11 +233,19 @@ def _subject_and_department_for_leave(db: Session, leave: LeaveRequest) -> tuple
     )
     if not slot:
         return None, None
-    subject = db.query(Subject).filter(Subject.id == slot.subject_id).first()
+    subject = db.query(Subject).filter(Subject.id == slot.subject_id).first() if slot.subject_id else None
     dept_name = None
     if subject and subject.department_id:
         dept = db.query(Department).filter(Department.id == subject.department_id).first()
         dept_name = dept.name if dept else None
+    
+    # Fallback to class department if subject department is missing
+    if not dept_name and slot.class_id:
+        cls = db.query(Class).filter(Class.id == slot.class_id).first()
+        if cls and cls.department_id:
+            dept = db.query(Department).filter(Department.id == cls.department_id).first()
+            dept_name = dept.name if dept else None
+            
     return subject, dept_name
 
 

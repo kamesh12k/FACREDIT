@@ -11,6 +11,7 @@ from app.schemas.leave import (
     LeaveCreate, LeaveBatchCreate, LeaveOut, BulkLeaveAction,
     AlterAssignmentCreate, AlterAssignmentOut, FreeTeacherOut,
     OverrideSubstituteRequest, LockAssignmentRequest,
+    AdminCancelRequest, CancelImpactOut,
 )
 from app.schemas.substitution import RecommendationOut
 from app.services import leave_service, substitution_service
@@ -222,3 +223,38 @@ def debug_batch_test(
         return {"ok": True, "count": len(result), "ids": [r.id for r in result]}
     except Exception as e:
         return {"ok": False, "error": str(e), "trace": traceback.format_exc()}
+
+
+@router.post("/{leave_id}/cancel", response_model=LeaveOut)
+def cancel_leave(
+    leave_id: int,
+    current_user: User = Depends(require_teacher),
+    db: Session = Depends(get_db),
+):
+    """Teacher cancels their own leave. Future leaves are always
+    cancellable. Same-day leaves may only be cancelled before 10:00 AM.
+    Past leaves cannot be cancelled."""
+    return leave_service.cancel_leave_by_teacher(leave_id, current_user.id, db)
+
+
+@router.post("/{leave_id}/admin-cancel", response_model=LeaveOut)
+def admin_cancel_leave(
+    leave_id: int,
+    data: AdminCancelRequest,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Admin cancels any leave at any time. A reason is required for
+    the audit trail."""
+    return leave_service.cancel_leave_by_admin(leave_id, admin, data.reason, db)
+
+
+@router.get("/{leave_id}/cancel-impact", response_model=CancelImpactOut)
+def cancel_impact(
+    leave_id: int,
+    _admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Preview what substitute assignments and timetable entries will be
+    affected if this leave is cancelled."""
+    return leave_service.get_cancel_impact(leave_id, db)
