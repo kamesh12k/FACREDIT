@@ -1,4 +1,5 @@
 import logging
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -16,14 +17,16 @@ from app.services.admin_service import bootstrap_default_super_admin
 logging.basicConfig(level=logging.INFO)
 
 # Create tables on startup (use Alembic migrations in production)
-Base.metadata.create_all(bind=engine)
+if not os.environ.get("SKIP_DB_INIT"):
+    Base.metadata.create_all(bind=engine)
 
 # Bootstrap: if no Super Admin exists yet (fresh install, or right after a
 # Factory Reset performed via the offline CLI script with zero remaining
 # users), create username=admin / password=admin with a forced credential
 # change. No-op if a Super Admin already exists.
-with SessionLocal() as _bootstrap_db:
-    bootstrap_default_super_admin(_bootstrap_db)
+if not os.environ.get("SKIP_DB_INIT"):
+    with SessionLocal() as _bootstrap_db:
+        bootstrap_default_super_admin(_bootstrap_db)
 
 app = FastAPI(
     title=settings.APP_NAME,
