@@ -1,4 +1,19 @@
-# Credits
+# FACREDIT
+
+Faculty Credit Management System
+
+Copyright © 2026 Kamesh G.
+All Rights Reserved.
+
+FACREDIT is proprietary software developed by Kamesh G.
+This repository is not licensed under any open-source license.
+No part of this software may be copied, modified, distributed,
+or used without prior written permission except under a commercial license agreement.
+
+For commercial licensing:
+📧 kameshgovindhan01@gmail.com
+
+---
 
 A production-ready web application for managing teacher leave requests, substitute assignments, and credit-based workload balancing — with full classroom, subject, room, Day Order, and Academic Calendar / Holiday management.
 
