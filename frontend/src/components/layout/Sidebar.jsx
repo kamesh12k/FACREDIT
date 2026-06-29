@@ -55,6 +55,7 @@ const ADMIN_NAV = [
     section: 'Setup',
     items: [
       { to: '/admin/teachers', label: 'Teachers', icon: <UsersIcon /> },
+      { to: '/admin/departments', label: 'Departments', icon: <UsersIcon /> },
       { to: '/admin/subjects', label: 'Subjects', icon: <BookIcon /> },
       { to: '/admin/classes', label: 'Classes', icon: <UsersIcon /> },
       { to: '/admin/rooms', label: 'Rooms & Labs', icon: <DoorIcon /> },

@@ -265,7 +265,8 @@ function AdminsPanel({ isSuperAdmin }) {
       {loading ? (
         <div className="flex justify-center py-10"><Spinner /></div>
       ) : (
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
               {['Name', 'Username', 'Level', 'Status', isSuperAdmin ? '' : null].filter(Boolean).map(h => (
@@ -301,6 +302,7 @@ function AdminsPanel({ isSuperAdmin }) {
             ))}
           </tbody>
         </table>
+        </div>
       )}
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Add Secondary Admin">

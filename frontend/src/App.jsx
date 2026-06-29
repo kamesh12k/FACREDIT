@@ -17,6 +17,7 @@ import AdminCredits from './pages/admin/Credits'
 import AdminSubjects from './pages/admin/Subjects'
 import AdminClasses from './pages/admin/Classes'
 import AdminRooms from './pages/admin/Rooms'
+import AdminDepartments from './pages/admin/Departments'
 import ResourceAvailability from './pages/admin/ResourceAvailability'
 import AdminSettings from './pages/admin/Settings'
 import AcademicCalendar from './pages/admin/AcademicCalendar'
@@ -64,6 +65,7 @@ export default function App() {
               <Route path="/admin/credits" element={<AdminCredits />} />
               <Route path="/admin/subjects" element={<AdminSubjects />} />
               <Route path="/admin/classes" element={<AdminClasses />} />
+              <Route path="/admin/departments" element={<AdminDepartments />} />
               <Route path="/admin/rooms" element={<AdminRooms />} />
               <Route path="/admin/resource-availability" element={<ResourceAvailability />} />
               <Route path="/admin/today-substitutions" element={<TodaySubstitutions />} />

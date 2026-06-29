@@ -71,7 +71,8 @@ export default function LeaveHistory() {
         {loading ? (
           <div className="flex justify-center py-12"><Spinner /></div>
         ) : leaves.length === 0 ? <EmptyState message="No leave requests yet." /> : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 {['Date', 'Day Order', 'Period', 'Reason', 'Status', 'Submitted', ''].map(h => (
@@ -124,6 +125,7 @@ export default function LeaveHistory() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

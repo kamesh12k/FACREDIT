@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.core.dependencies import require_admin, get_current_user
 from app.models.user import User, Role
+from app.models.timetable import TimetableSlot
+from app.models.leave import LeaveRequest, AlterAssignment
 from app.schemas.user import UserOut, UserCreate, UserUpdate
 from app.schemas.credit import CreditBalanceOut
 from app.services import auth_service
@@ -77,3 +79,43 @@ def update_teacher(
     db.commit()
     db.refresh(teacher)
     return teacher
+
+
+@router.delete("/{teacher_id}", status_code=204)
+def delete_teacher(
+    teacher_id: int,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    teacher = db.query(User).filter(User.id == teacher_id, User.role == Role.teacher).first()
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+
+    # Check constraints:
+    # 1. Timetable slots
+    if db.query(TimetableSlot).filter(TimetableSlot.teacher_id == teacher_id).first():
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete a teacher with associated timetable slots"
+        )
+
+    # 2. Leave requests
+    if db.query(LeaveRequest).filter(LeaveRequest.teacher_id == teacher_id).first():
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete a teacher with associated leave requests"
+        )
+
+    # 3. Substitute assignments
+    if db.query(AlterAssignment).filter(AlterAssignment.substitute_teacher_id == teacher_id).first():
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete a teacher with associated substitute assignments"
+        )
+
+    log_audit_event(
+        db, admin.id, "teachers.delete", "user", teacher.id,
+        {"name": teacher.name, "email": teacher.email}
+    )
+    db.delete(teacher)
+    db.commit()

@@ -20,6 +20,12 @@ export default function Teachers() {
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState('')
 
+  // Delete Teacher State
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [teacherToDelete, setTeacherToDelete] = useState(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+
   const load = () => {
     Promise.all([teachersApi.list(), departmentsApi.list()])
       .then(([t, d]) => {
@@ -83,6 +89,26 @@ export default function Teachers() {
     }
   }
 
+  const handleOpenDelete = (teacher) => {
+    setTeacherToDelete(teacher)
+    setDeleteError('')
+    setDeleteConfirmOpen(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    setDeleteError('')
+    setDeleting(true)
+    try {
+      await teachersApi.remove(teacherToDelete.id)
+      setDeleteConfirmOpen(false)
+      load()
+    } catch (err) {
+      setDeleteError(err.response?.data?.detail || 'Failed to delete teacher.')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -94,7 +120,8 @@ export default function Teachers() {
         {loading ? (
           <div className="flex justify-center py-12"><Spinner /></div>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 {['Name', 'Email', 'Department', 'Status', ''].map(h => (
@@ -114,12 +141,20 @@ export default function Teachers() {
                     </span>
                   </td>
                   <td className="px-5 py-3 text-right">
-                    <button
-                      onClick={() => handleOpenEditModal(t)}
-                      className="text-xs text-primary-600 hover:text-primary-800 font-semibold hover:underline"
-                    >
-                      Edit
-                    </button>
+                    <div className="flex justify-end gap-3">
+                      <button
+                        onClick={() => handleOpenEditModal(t)}
+                        className="text-xs text-primary-600 hover:text-primary-800 font-semibold hover:underline"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleOpenDelete(t)}
+                        className="text-xs text-red-500 hover:text-red-700 font-semibold hover:underline"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -128,6 +163,7 @@ export default function Teachers() {
               )}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
@@ -210,6 +246,20 @@ export default function Teachers() {
             <button type="submit" disabled={editSaving} className="btn-primary flex-1">{editSaving ? 'Saving…' : 'Save Changes'}</button>
           </div>
         </form>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)} title="Delete Teacher">
+        <div className="space-y-4">
+          <ErrorAlert message={deleteError} />
+          <p className="text-sm text-gray-600">
+            Are you sure you want to delete the teacher <strong className="text-gray-800">{teacherToDelete?.name}</strong>? This action cannot be undone and will fail if the teacher has any associated timetable slots, leave requests, or substitute assignments.
+          </p>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setDeleteConfirmOpen(false)} className="btn-secondary flex-1">Cancel</button>
+            <button type="button" onClick={handleDeleteConfirm} disabled={deleting} className="btn-danger flex-1">{deleting ? 'Deleting…' : 'Delete'}</button>
+          </div>
+        </div>
       </Modal>
     </div>
   )

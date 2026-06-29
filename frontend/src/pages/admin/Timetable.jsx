@@ -1595,4 +1595,74 @@ const CSS = `
 .tt-left::-webkit-scrollbar-thumb,
 .tt-right::-webkit-scrollbar-thumb,
 .tt-center::-webkit-scrollbar-thumb { background: #E2E8F0; border-radius: 99px; }
+
+/* ─── Mobile / Tablet Optimizations ─────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .tt-header {
+    padding: 10px;
+    gap: 10px;
+  }
+  .tt-brand {
+    width: 100%;
+  }
+  .tt-controls {
+    align-items: stretch;
+    width: 100%;
+  }
+  .tt-search-row,
+  .tt-action-row {
+    flex-wrap: wrap;
+    width: 100%;
+    gap: 6px;
+  }
+  .tt-search-row > *,
+  .tt-action-row > * {
+    flex: 1 1 auto;
+    min-width: 120px;
+  }
+  .tt-btn-group {
+    display: flex;
+    width: 100%;
+  }
+  .tt-btn-group .tt-btn {
+    flex: 1;
+    justify-content: center;
+  }
+  .tt-body {
+    flex-direction: column;
+    overflow: visible;
+    height: auto;
+    padding: 10px;
+    gap: 12px;
+  }
+  .tt-left {
+    width: 100%;
+    max-height: 250px;
+    padding-right: 0;
+    border-bottom: 1px solid #E4E7EC;
+    padding-bottom: 10px;
+  }
+  .tt-subject-list {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 8px;
+    padding-bottom: 8px;
+  }
+  .tt-subject-card {
+    flex: 0 0 150px;
+  }
+  .tt-center {
+    width: 100%;
+    overflow-x: auto;
+    border: 1px solid #E4E7EC;
+    border-radius: 12px;
+    background: #fff;
+    padding: 8px;
+  }
+  .tt-right {
+    width: 100%;
+    padding-left: 0;
+    overflow-y: visible;
+  }
+}
 `

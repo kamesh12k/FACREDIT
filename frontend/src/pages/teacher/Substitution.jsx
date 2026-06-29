@@ -210,7 +210,8 @@ export default function TeacherSubstitution() {
           myLeaves.length === 0 ? (
             <EmptyState message="No approved leaves needing substitutes right now." />
           ) : (
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
                   {['Date', 'Day Order', 'Period', 'Reason', ''].map(h => (
@@ -244,12 +245,14 @@ export default function TeacherSubstitution() {
                 ))}
               </tbody>
             </table>
+            </div>
           )
         ) : (
           activeCoverLeaves.length === 0 ? (
             <EmptyState message="No substitute covers assigned yet." />
           ) : (
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
                   {['Date', 'Day Order', 'Period', 'Assigned Substitute', 'Type', ''].map(h => (
@@ -280,6 +283,7 @@ export default function TeacherSubstitution() {
                 ))}
               </tbody>
             </table>
+            </div>
           )
         )}
       </div>

@@ -42,10 +42,10 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     timetable_slots = relationship("TimetableSlot", back_populates="teacher")
-    leave_requests = relationship("LeaveRequest", back_populates="teacher", foreign_keys="LeaveRequest.teacher_id")
+    leave_requests = relationship("LeaveRequest", back_populates="teacher", foreign_keys="LeaveRequest.teacher_id", cascade="all, delete-orphan")
     alter_assignments = relationship("AlterAssignment", back_populates="substitute", foreign_keys="AlterAssignment.substitute_teacher_id")
-    credit_transactions = relationship("CreditTransaction", back_populates="teacher")
-    credit_balance = relationship("TeacherCredit", back_populates="teacher", uselist=False)
+    credit_transactions = relationship("CreditTransaction", back_populates="teacher", cascade="all, delete-orphan")
+    credit_balance = relationship("TeacherCredit", back_populates="teacher", uselist=False, cascade="all, delete-orphan")
 
     @property
     def is_super_admin(self) -> bool:

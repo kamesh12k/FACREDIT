@@ -7,6 +7,11 @@ class DepartmentCreate(BaseModel):
     code: str | None = None
 
 
+class DepartmentUpdate(BaseModel):
+    name: str | None = None
+    code: str | None = None
+
+
 class DepartmentOut(BaseModel):
     id: int
     name: str

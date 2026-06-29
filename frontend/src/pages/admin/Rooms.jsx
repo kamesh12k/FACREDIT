@@ -118,7 +118,8 @@ export default function AdminRooms() {
         {loading ? (
           <div className="flex justify-center py-12"><Spinner /></div>
         ) : rooms.length === 0 ? <EmptyState message="No rooms yet." /> : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 {['Room', 'Type', 'Capacity', 'Department', ''].map(h => (
@@ -147,6 +148,7 @@ export default function AdminRooms() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

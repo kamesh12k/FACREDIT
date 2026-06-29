@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { classesApi, departmentsApi } from '../../api/services'
-import { Spinner, ErrorAlert, Modal } from '../../components/ui'
+import { Spinner, ErrorAlert, Modal, EmptyState } from '../../components/ui'
 
 export default function AdminClasses() {
   const [classes, setClasses] = useState([])
@@ -114,7 +114,8 @@ export default function AdminClasses() {
         {loading ? (
           <div className="flex justify-center py-12"><Spinner /></div>
         ) : classes.length === 0 ? <EmptyState message="No classes yet." /> : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 {['Name', 'Section', 'Department', 'Semester', ''].map(h => (
@@ -139,6 +140,7 @@ export default function AdminClasses() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

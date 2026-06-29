@@ -5,9 +5,10 @@ from fastapi.testclient import TestClient
 
 from app.models.user import Role, AdminLevel
 from app.models.day_order_calendar import DayType
+from app.models.leave import AlterAssignment
 from tests.conftest import (
     create_department, create_subject, create_class, create_room,
-    create_calendar_day, create_leave_request,
+    create_calendar_day, create_leave_request, create_timetable_slot,
 )
 
 
@@ -98,3 +99,74 @@ class TestTimetableRoutes:
         response = client.post("/timetable/slot", json=payload, headers=auth_headers_admin)
         assert response.status_code == 201
         assert response.json()["period_number"] == 1
+
+
+class TestDepartmentsRoutes:
+    def test_update_department_route_success(self, client, auth_headers_admin, db_session):
+        dept = create_department(db_session, name="CS", code="CS")
+        payload = {"name": "Computer Science", "code": "CS_UPDATED"}
+        response = client.patch(f"/departments/{dept.id}", json=payload, headers=auth_headers_admin)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["name"] == "Computer Science"
+        assert data["code"] == "CS_UPDATED"
+
+    def test_update_department_route_duplicate(self, client, auth_headers_admin, db_session):
+        create_department(db_session, name="CS", code="CS")
+        dept2 = create_department(db_session, name="IT", code="IT")
+        payload = {"name": "CS"}
+        response = client.patch(f"/departments/{dept2.id}", json=payload, headers=auth_headers_admin)
+        assert response.status_code == 400
+
+    def test_delete_department_route_success(self, client, auth_headers_admin, db_session):
+        dept = create_department(db_session, name="CS", code="CS")
+        response = client.delete(f"/departments/{dept.id}", headers=auth_headers_admin)
+        assert response.status_code == 204
+
+    def test_delete_department_route_in_use(self, client, auth_headers_admin, db_session):
+        dept = create_department(db_session, name="CS", code="CS")
+        create_subject(db_session, code="CS101", department_id=dept.id)
+        response = client.delete(f"/departments/{dept.id}", headers=auth_headers_admin)
+        assert response.status_code == 400
+        assert "Cannot delete a department" in response.json()["detail"]
+
+
+class TestTeachersRoutes:
+    def test_delete_teacher_route_success(self, client, auth_headers_admin, test_teacher):
+        response = client.delete(f"/teachers/{test_teacher.id}", headers=auth_headers_admin)
+        assert response.status_code == 204
+
+    def test_delete_teacher_route_blocked_timetable(
+        self, client, auth_headers_admin, test_teacher, db_session
+    ):
+        dept = create_department(db_session)
+        subj = create_subject(db_session, department_id=dept.id)
+        cls = create_class(db_session, department_id=dept.id)
+        room = create_room(db_session)
+        create_timetable_slot(db_session, teacher_id=test_teacher.id, subject_id=subj.id, class_id=cls.id, room_id=room.id)
+        
+        response = client.delete(f"/teachers/{test_teacher.id}", headers=auth_headers_admin)
+        assert response.status_code == 400
+        assert "associated timetable slots" in response.json()["detail"]
+
+    def test_delete_teacher_route_blocked_leave(
+        self, client, auth_headers_admin, test_teacher, db_session
+    ):
+        create_leave_request(db_session, teacher_id=test_teacher.id)
+        response = client.delete(f"/teachers/{test_teacher.id}", headers=auth_headers_admin)
+        assert response.status_code == 400
+        assert "associated leave requests" in response.json()["detail"]
+
+    def test_delete_teacher_route_blocked_substitution(
+        self, client, auth_headers_admin, test_teacher, test_teacher2, db_session
+    ):
+        leave = create_leave_request(db_session, teacher_id=test_teacher2.id)
+        assignment = AlterAssignment(leave_request_id=leave.id, substitute_teacher_id=test_teacher.id)
+        db_session.add(assignment)
+        db_session.commit()
+        
+        response = client.delete(f"/teachers/{test_teacher.id}", headers=auth_headers_admin)
+        assert response.status_code == 400
+        assert "associated substitute assignments" in response.json()["detail"]
+
+

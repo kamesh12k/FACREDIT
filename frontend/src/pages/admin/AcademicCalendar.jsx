@@ -67,7 +67,14 @@ function DayOrderPill({ order, size = 'md' }) {
       userSelect: 'none',
       whiteSpace: 'nowrap',
     }}>
-      {isLg ? `Day Order ${order}` : `DO${order}`}
+      {isLg ? (
+        `Day Order ${order}`
+      ) : (
+        <>
+          <span className="hidden sm:inline">DO{order}</span>
+          <span className="inline sm:hidden">{order}</span>
+        </>
+      )}
     </span>
   )
 }
@@ -90,7 +97,9 @@ function LeaveTypePill({ dayType, size = 'sm' }) {
       whiteSpace: 'nowrap',
     }}>
       <span style={{ width: isLg ? 7 : 5, height: isLg ? 7 : 5, borderRadius: '50%', background: meta.dot, flexShrink: 0 }} />
-      {isLg ? LEAVE_TYPES.find(t => t.value === dayType)?.label || meta.label : meta.label}
+      <span className={isLg ? "" : "hidden sm:inline"}>
+        {isLg ? LEAVE_TYPES.find(t => t.value === dayType)?.label || meta.label : meta.label}
+      </span>
     </span>
   )
 }
@@ -124,7 +133,10 @@ function MonthGrid({ year, month, daysByDate, onDayClick }) {
             textAlign: 'center', fontSize: 11, fontWeight: 600, letterSpacing: '0.05em',
             color: (i === 0 || i === 6) ? '#DC2626' : 'var(--text-muted)',
             padding: '4px 0', textTransform: 'uppercase',
-          }}>{d}</div>
+          }}>
+            <span className="hidden sm:inline">{d}</span>
+            <span className="inline sm:hidden">{d[0]}</span>
+          </div>
         ))}
       </div>
 
@@ -206,7 +218,7 @@ function MonthGrid({ year, month, daysByDate, onDayClick }) {
                   <LeaveTypePill dayType={entry.day_type} />
                 )}
                 {!entry && !weekend && (
-                  <span style={{ fontSize: 9, color: 'var(--text-muted)', fontStyle: 'italic' }}>unset</span>
+                  <span className="hidden sm:inline" style={{ fontSize: 9, color: 'var(--text-muted)', fontStyle: 'italic' }}>unset</span>
                 )}
               </div>
 

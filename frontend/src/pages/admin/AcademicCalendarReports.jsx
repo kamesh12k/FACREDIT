@@ -46,7 +46,8 @@ function WorkingDaysReport() {
       {rows && (
         <div className="card overflow-hidden">
           {rows.length === 0 ? <EmptyState message="No calendar entries in this range." /> : (
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>{['Date', 'Day Order', 'Working?'].map(h => <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>)}</tr>
               </thead>
@@ -60,6 +61,7 @@ function WorkingDaysReport() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       )}
@@ -93,7 +95,8 @@ function HolidaysReport() {
       {rows && (
         <div className="card overflow-hidden">
           {rows.length === 0 ? <EmptyState message="No holidays/non-working days in this range." /> : (
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>{['Date', 'Type', 'Label'].map(h => <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>)}</tr>
               </thead>
@@ -107,6 +110,7 @@ function HolidaysReport() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       )}
@@ -140,7 +144,8 @@ function DayOrderReport() {
       {rows && (
         <div className="card overflow-hidden">
           {rows.length === 0 ? <EmptyState message="No Day Order occurrences in this range." /> : (
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>{['Day Order', 'Occurrences', 'Dates'].map(h => <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>)}</tr>
               </thead>
@@ -154,6 +159,7 @@ function DayOrderReport() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       )}
@@ -188,7 +194,8 @@ function FacultyWorkloadReport() {
       {rows && (
         <div className="card overflow-hidden">
           {rows.length === 0 ? <EmptyState message="No teachers found." /> : (
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>{['Teacher', 'Department', 'Total Periods (excl. holidays)', 'Credit Balance'].map(h => <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>)}</tr>
               </thead>
@@ -203,6 +210,7 @@ function FacultyWorkloadReport() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       )}

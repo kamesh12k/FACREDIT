@@ -38,7 +38,8 @@ export default function MyCredits() {
           <h2 className="text-sm font-semibold text-gray-800">Transaction History</h2>
         </div>
         {transactions.length === 0 ? <EmptyState message="No credit transactions yet." /> : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 {['Change', 'Reason', 'Date'].map(h => (
@@ -56,6 +57,7 @@ export default function MyCredits() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

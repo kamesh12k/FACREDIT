@@ -201,7 +201,8 @@ export default function AdminLeaves() {
         {loading ? (
           <div className="flex justify-center py-12"><Spinner /></div>
         ) : leaves.length === 0 ? <EmptyState message="No leave requests yet." /> : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 <th className="px-4 py-3 w-8">
@@ -320,6 +321,7 @@ export default function AdminLeaves() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

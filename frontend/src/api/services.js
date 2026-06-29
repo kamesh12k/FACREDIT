@@ -25,6 +25,7 @@ export const teachersApi = {
   update: (id, data) => api.put(`/teachers/${id}`, data),
   me: () => api.get('/teachers/me'),
   credits: (id) => api.get(`/teachers/${id}/credits`),
+  remove: (id) => api.delete(`/teachers/${id}`),
 }
 
 export const timetableApi = {
@@ -38,6 +39,8 @@ export const timetableApi = {
 export const departmentsApi = {
   list: () => api.get('/departments/'),
   create: (data) => api.post('/departments/', data),
+  update: (id, data) => api.patch(`/departments/${id}`, data),
+  remove: (id) => api.delete(`/departments/${id}`),
 }
 
 export const subjectsApi = {

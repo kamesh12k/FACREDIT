@@ -107,7 +107,8 @@ export default function AdminSubjects() {
         {loading ? (
           <div className="flex justify-center py-12"><Spinner /></div>
         ) : subjects.length === 0 ? <EmptyState message="No subjects yet." /> : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 {['Code', 'Name', 'Type', 'Credits', 'Department', 'Semester', 'Status', ''].map(h => (
@@ -141,6 +142,7 @@ export default function AdminSubjects() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

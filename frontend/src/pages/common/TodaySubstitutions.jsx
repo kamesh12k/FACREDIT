@@ -495,7 +495,8 @@ export default function TodaySubstitutions() {
         {filteredSubstitutions.length === 0 ? (
           <EmptyState message="No substitution records found for the selected filters." />
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 {['Period', 'Class Section', 'Original Teacher', 'Substitute Teacher', 'Source', ''].map((h, i) => (
@@ -583,6 +584,7 @@ export default function TodaySubstitutions() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

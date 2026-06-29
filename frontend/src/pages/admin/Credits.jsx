@@ -68,7 +68,8 @@ export default function AdminCredits() {
           <h2 className="text-sm font-semibold text-gray-800">Credit Balances</h2>
         </div>
         {report.length === 0 ? <EmptyState message="No credit data yet." /> : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 {['Teacher', 'Department', 'Balance'].map(h => (
@@ -86,6 +87,7 @@ export default function AdminCredits() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
@@ -94,7 +96,8 @@ export default function AdminCredits() {
           <h2 className="text-sm font-semibold text-gray-800">All Transactions</h2>
         </div>
         {transactions.length === 0 ? <EmptyState message="No transactions yet." /> : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 {['Teacher', 'Change', 'Reason', 'Date'].map(h => (
@@ -113,6 +116,7 @@ export default function AdminCredits() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
