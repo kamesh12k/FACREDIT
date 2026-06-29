@@ -407,6 +407,7 @@ A timestamped JSON backup is written to `backend/backups/` automatically before 
 ## Credits
 
 **Developer:** Kamesh G
+
 **Institution:** Muthayammal College of Arts and Science (Autonomous) — B.Sc. Computer Science, II Year, Section B
 **Academic Guidance:** Mr. Krishnamoorthi, Assistant Professor
 
